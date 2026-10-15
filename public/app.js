@@ -1,9 +1,9 @@
 const STATE_KEY="injectionReminder.state.v2",QUEUE_KEY="injectionReminder.queue.v2";
 const RAW_API_BASE_URL=String(window.INJECTION_REMINDER_CONFIG?.apiBaseUrl||"");
 const API_BASE_URL=RAW_API_BASE_URL.endsWith("/")?RAW_API_BASE_URL.slice(0,-1):RAW_API_BASE_URL;
-const ids=["installGate","setupView","notificationSetup","homeView","statusPill","recheckInstall","anchorDate","saveSetup","enableNotifications","skipNotifications","countdown","nextDueDate","nextInjectionSide","doseText","doseDots","packageEmpty","confirmInjection","confirmHint","newPackage","historyList","testNotification","resetApp","offlineBanner","pushWarning","toast","confirmDialog","confirmDialogText","dialogConfirmInjection","packageDialog","dialogConfirmPackage","missingSidePanel","saveMissingSide","pushDiagnostics"];
+const ids=["installGate","setupView","notificationSetup","homeView","statusPill","recheckInstall","anchorDate","saveSetup","enableNotifications","skipNotifications","countdown","nextDueDate","nextInjectionSide","doseText","doseDots","packageEmpty","confirmInjection","confirmHint","newPackage","historyList","testNotification","resetApp","offlineBanner","pushWarning","toast","confirmDialog","confirmDialogText","dialogConfirmInjection","packageDialog","dialogConfirmPackage","missingSidePanel","saveMissingSide","pushDiagnostics","orderPackage","editTracking","refreshTracking","editTrackingDialog","editNextDue","editNextSide","editStock","editOrderPending","saveTrackingEdits"];
 const el=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));
-const defaults=()=>({configured:false,anchorDate:"",nextDueDate:"",lastInjectionSide:null,nextInjectionSide:null,dosesRemaining:2,history:[],deviceId:crypto.randomUUID(),notificationSetupSeen:false,pushSynced:false});
+const defaults=()=>({configured:false,anchorDate:"",nextDueDate:"",lastInjectionSide:null,nextInjectionSide:null,dosesRemaining:2,orderPending:false,history:[],deviceId:crypto.randomUUID(),notificationSetupSeen:false,pushSynced:false});
 function load(){try{return {...defaults(),...(JSON.parse(localStorage.getItem(STATE_KEY))||{})};}catch{return defaults();}}
 let state=load(),selectedDose=2,selectedSide=null,toastTimer;
 const save=()=>localStorage.setItem(STATE_KEY,JSON.stringify(state));
@@ -123,12 +123,15 @@ function render(){
   el.nextInjectionSide.textContent=sideLabel(state.nextInjectionSide);
   el.countdown.textContent=countdown(state.nextDueDate);
   el.countdown.classList.toggle("overdue",daysUntil(state.nextDueDate)<=0);
-  el.doseText.textContent=`${state.dosesRemaining} מתוך 2`;
+  el.doseText.textContent=`${state.dosesRemaining} זריקות זמינות`;
   el.doseDots.replaceChildren();
-  for(let i=0;i<2;i++){const d=document.createElement("span");d.className="dose-dot "+(i<state.dosesRemaining?"filled":"");el.doseDots.appendChild(d);}
-  el.packageEmpty.classList.toggle("hidden",state.dosesRemaining!==0);
-  el.confirmInjection.disabled=!dueNow();
-  el.confirmHint.classList.toggle("hidden",dueNow());
+  for(let i=0;i<Math.max(2,Math.min(6,state.dosesRemaining));i++){const d=document.createElement("span");d.className="dose-dot "+(i<state.dosesRemaining?"filled":"");el.doseDots.appendChild(d);}
+  el.packageEmpty.classList.toggle("hidden",state.dosesRemaining!==0&&!state.orderPending);
+  el.packageEmpty.textContent=state.orderPending?(state.dosesRemaining===0?"החבילה הוזמנה — ממתינים להגעה":"חבילה חדשה בהזמנה"):"המלאי הסתיים — יש לרכוש חבילה";
+  el.orderPackage.textContent=state.orderPending?"בטל סימון הזמנה":"הזמנתי חבילה";
+  el.confirmInjection.disabled=!dueNow()||state.dosesRemaining<=0;
+  el.confirmHint.classList.toggle("hidden",dueNow()&&state.dosesRemaining>0);
+  el.confirmHint.textContent=state.dosesRemaining<=0?"המלאי ריק. עדכן את המלאי אחרי קבלת חבילה.":"ניתן לאשר החל מיום ההזרקה המתוכנן.";
   renderHistory();
  }
  notifyStatus();
@@ -140,7 +143,7 @@ async function configure(){
  if(!selectedSide)return toast("בחר באיזו ירך בוצעה ההזרקה האחרונה.");
  state.configured=true;state.anchorDate=anchorDate;state.nextDueDate=addDays(anchorDate,14);state.lastInjectionSide=selectedSide;state.nextInjectionSide=oppositeSide(selectedSide);state.dosesRemaining=selectedDose;state.history=[];state.notificationSetupSeen=false;
  save();render();
- try{await device("/configure",{anchorDate,timeZone:timezone(),lastInjectionSide:selectedSide},"POST",true);}
+ try{await device("/configure",{anchorDate,timeZone:timezone(),lastInjectionSide:selectedSide,dosesRemaining:selectedDose},"POST",true);}
  catch{toast("ההגדרה נשמרה. חיבור ההתראות יסתנכרן כשיהיה אינטרנט.");}
 }
 async function confirmInjection(){
@@ -155,9 +158,52 @@ async function confirmInjection(){
  catch{toast("ההזרקה נשמרה במכשיר. התראות בשרת יבוטלו לאחר חזרת החיבור.");}
 }
 async function purchased(){
- state.dosesRemaining=2;save();render();
- try{await device("/purchased",{},"POST",true);toast("מונה החבילה אופס ל־2 זריקות.");}
+ state.dosesRemaining=Math.min(40,state.dosesRemaining+2);state.orderPending=false;save();render();
+ try{await device("/purchased",{},"POST",true);toast("שתי זריקות נוספו למלאי. תזכורת הרכישה בוטלה.");}
  catch{toast("נשמר במכשיר ויסתנכרן כשיהיה אינטרנט.");}
+}
+async function toggleOrder(){
+ const pending=!state.orderPending;
+ state.orderPending=pending;save();render();
+ try{
+  await device(pending?"/ordered":"/cancel-order",{},"POST",true);
+  toast(pending?"ההזמנה נרשמה — לא יישלחו תזכורות רכישה בזמן ההמתנה.":"סימון ההזמנה בוטל.");
+ }catch{toast("השינוי נשמר באייפון, אך לא סונכרן עדיין להתראות. בדוק חיבור לאינטרנט.");}
+}
+function openTrackingEditor(){
+ el.editNextDue.value=state.nextDueDate;
+ el.editNextSide.value=state.nextInjectionSide||"right";
+ el.editStock.value=state.dosesRemaining;
+ el.editOrderPending.checked=!!state.orderPending;
+ el.editTrackingDialog.showModal();
+}
+async function applyTrackingEdits(){
+ const date=el.editNextDue.value,side=el.editNextSide.value,stock=Number(el.editStock.value),ordered=el.editOrderPending.checked;
+ if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||isoLocal(parseDate(date))!==date)return toast("בחר תאריך תקין.");
+ if(side!=="left"&&side!=="right")return toast("בחר צד הזרקה.");
+ if(!Number.isInteger(stock)||stock<0||stock>40)return toast("יש להזין מלאי בין 0 ל־40.");
+ if(!navigator.onLine)return toast("עריכת המועד מחייבת חיבור לשרת ההתראות. נסה לאחר חיבור לאינטרנט.");
+ const scheduleChanged=date!==state.nextDueDate||side!==state.nextInjectionSide;
+ if(scheduleChanged&&!confirm("שינוי מועד או ירך ישנה את תזמון ההתראות העתידיות. ההיסטוריה לא תימחק. להמשיך?"))return;
+ el.saveTrackingEdits.disabled=true;
+ try{
+  await device("/edit",{nextDueDate:date,nextSide:side,dosesRemaining:stock,orderPending:ordered},"POST");
+  state.nextDueDate=date;state.nextInjectionSide=side;state.lastInjectionSide=oppositeSide(side);
+  state.anchorDate=addDays(date,-14);state.dosesRemaining=stock;state.orderPending=ordered;
+  save();render();el.editTrackingDialog.close();
+  toast("הפרטים וההתראות העתידיות עודכנו. ההיסטוריה נשמרה.");
+ }catch(err){toast("לא ניתן לשמור שינוי בלי לסנכרן התראות. נסה שוב כשהשרת זמין.");}
+ finally{el.saveTrackingEdits.disabled=false;}
+}
+async function refreshTracking(){
+ el.refreshTracking.disabled=true;
+ try{
+  await flush();
+  await navigator.serviceWorker.getRegistration("./").then(reg=>reg?.update()).catch(()=>null);
+  if("Notification"in window&&Notification.permission==="granted"){try{await subscribe(false);}catch{}}
+  render();
+  toast("רועננו הנתונים המקומיים וסנכרון ההתראות נבדק.");
+ }finally{el.refreshTracking.disabled=false;}
 }
 async function reset(){
  if(!confirm("למחוק את כל הנתונים ולהתחיל מחדש?"))return;
@@ -186,6 +232,10 @@ function bind(){
  el.pushWarning.addEventListener("click",async()=>{try{await subscribe(true);toast("ההתראות הופעלו.");}catch{toast("לא ניתן להפעיל התראות כעת.");}render();});
  el.confirmInjection.addEventListener("click",()=>{if(!state.nextInjectionSide)return toast("יש להשלים קודם את צד ההזרקה האחרונה.");el.confirmDialogText.textContent=`האישור יתייחס למועד המתוכנן ${formatDate(state.nextDueDate)}, ${sideLabel(state.nextInjectionSide)}. ההזרקה הבאה תישאר 14 יום לאחר המועד המתוכנן הזה ובצד ההפוך.`;el.confirmDialog.showModal();});
  el.dialogConfirmInjection.addEventListener("click",e=>{e.preventDefault();el.confirmDialog.close();confirmInjection();});
+ el.orderPackage.addEventListener("click",toggleOrder);
+ el.editTracking.addEventListener("click",openTrackingEditor);
+ el.saveTrackingEdits.addEventListener("click",e=>{e.preventDefault();applyTrackingEdits();});
+ el.refreshTracking.addEventListener("click",refreshTracking);
  el.newPackage.addEventListener("click",()=>el.packageDialog.showModal());
  el.dialogConfirmPackage.addEventListener("click",e=>{e.preventDefault();el.packageDialog.close();purchased();});
  el.testNotification.addEventListener("click",async()=>{

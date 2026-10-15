@@ -110,3 +110,29 @@ test("delayed test requires an existing push subscription",async()=>{
  const response=await device.fetch(new Request("https://internal/test-delayed",{method:"POST"}));
  assert.equal(response.status,409);
 });
+
+test("editing next injection reanchors its date/side without clearing inventory workflow",async()=>{
+ const {device,db}=fakeState({...base("2026-10-01"),confirmedDueDates:["2026-10-15"],subscription:null});
+ const req=new Request("https://internal/edit",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({nextDueDate:"2026-10-31",nextSide:"right",dosesRemaining:3,orderPending:false})});
+ const response=await device.fetch(req);
+ assert.equal(response.status,200);
+ const s=db.get("state");
+ assert.equal(s.anchorDate,"2026-10-17");
+ assert.equal(s.anchorSide,"left");
+ assert.deepEqual(s.confirmedDueDates,[]);
+ const event=device.nextEvent(s,stamp("2026-10-30",19));
+ assert.equal(event.kind,"eve");assert.equal(event.side,"right");
+});
+test("ordering stops purchase reminder, receipt and cancellation are independent of the dose cycle",async()=>{
+ const {device,db}=fakeState({...base("2026-10-01"),subscription:null,isDepleted:true,purchaseReminderAt:"2026-10-20T07:00:00.000Z"});
+ async function post(name){return device.fetch(new Request("https://internal/"+name,{method:"POST",headers:{"content-type":"application/json"},body:"{}"}));}
+ assert.equal((await post("ordered")).status,200);
+ assert.equal(db.get("state").orderPending,true);
+ assert.equal(db.get("state").purchaseReminderAt,null);
+ assert.equal((await post("cancel-order")).status,200);
+ assert.equal(db.get("state").orderPending,false);
+ assert.ok(db.get("state").purchaseReminderAt);
+ assert.equal((await post("purchased")).status,200);
+ assert.equal(db.get("state").purchaseReminderAt,null);
+ assert.equal(db.get("state").isDepleted,false);
+});

@@ -60,14 +60,32 @@
  <article class="card package-card"><div class="row between"><strong>החבילה הנוכחית</strong><span id="doseText">2 מתוך 2</span></div><div id="doseDots" class="dose-dots"></div><div id="packageEmpty" class="package-empty hidden">החבילה הסתיימה — יש לרכוש חדשה</div></article>
  <button id="confirmInjection" class="primary-button confirm-button" type="button">✓ &nbsp; הזרקתי</button>
  <div id="confirmHint" class="hint hidden">ניתן לאשר החל מיום ההזרקה המתוכנן.</div>
- <button id="newPackage" class="secondary-button" type="button">רכשתי חבילה חדשה</button>
+ <div class="package-actions">
+ <button id="orderPackage" class="secondary-button" type="button">הזמנתי חבילה</button>
+ <button id="newPackage" class="secondary-button" type="button">קיבלתי חבילה (+2 זריקות)</button>
+ </div>
  <section class="subsection"><div class="subsection-title">היסטוריית הזרקות</div><div id="historyList" class="history-list"></div></section>
- <section class="subsection settings-section"><div class="subsection-title">הגדרות</div><button id="testNotification" class="settings-row" type="button">בדיקת התראה (בעוד דקה) <span>‹</span></button><div id="pushDiagnostics" class="push-diagnostics hidden" role="status" aria-live="polite"></div><button id="resetApp" class="settings-row destructive" type="button">איפוס כל הנתונים <span>‹</span></button></section>
+ <section class="subsection settings-section"><div class="subsection-title">הגדרות</div>
+ <button id="editTracking" class="settings-row" type="button">עריכת המועד, הירך והמלאי <span>‹</span></button>
+ <button id="refreshTracking" class="settings-row" type="button">רענון וסנכרון <span>‹</span></button>
+ <button id="testNotification" class="settings-row" type="button">בדיקת התראה (בעוד דקה) <span>‹</span></button><div id="pushDiagnostics" class="push-diagnostics hidden" role="status" aria-live="polite"></div><button id="resetApp" class="settings-row destructive" type="button">איפוס כל הנתונים <span>‹</span></button></section>
 </section>
 </main><div id="toast" class="toast hidden" role="status"></div>
 </div>
 <dialog id="confirmDialog" class="dialog"><form method="dialog"><h3>לאשר שהזרקת?</h3><p id="confirmDialogText"></p><div class="dialog-actions"><button value="cancel" class="secondary-button">ביטול</button><button id="dialogConfirmInjection" class="primary-button" value="default">כן, הזרקתי</button></div></form></dialog>
-<dialog id="packageDialog" class="dialog"><form method="dialog"><h3>חבילה חדשה</h3><p>מונה החבילה יתאפס ל־2 זריקות.</p><div class="dialog-actions"><button value="cancel" class="secondary-button">ביטול</button><button id="dialogConfirmPackage" class="primary-button" value="default">אישור</button></div></form></dialog>
+<dialog id="packageDialog" class="dialog"><form method="dialog"><h3>קיבלתי חבילה חדשה</h3><p>שתי זריקות יתווספו למלאי הקיים. הזמנה פתוחה תסומן כהתקבלה, והתראת רכישה ממתינה תבוטל.</p><div class="dialog-actions"><button value="cancel" class="secondary-button">ביטול</button><button id="dialogConfirmPackage" class="primary-button" value="default">אישור</button></div></form></dialog>
+<dialog id="editTrackingDialog" class="dialog"><form method="dialog">
+ <h3>עריכת פרטי מעקב</h3>
+ <p>אפשר לתקן את ההזרקה הבאה, את הירך ואת המלאי. שינוי המועד יתזמן מחדש את ההתראות אך לא ימחק הזרקות קודמות.</p>
+ <label class="field-label" for="editNextDue">תאריך ההזרקה הבאה</label>
+ <input id="editNextDue" class="date-input" type="date" required>
+ <label class="field-label" for="editNextSide">הירך להזרקה הבאה</label>
+ <select id="editNextSide" class="date-input"><option value="right">ירך ימין</option><option value="left">ירך שמאל</option></select>
+ <label class="field-label" for="editStock">מספר זריקות זמינות (בכל חבילה 2)</label>
+ <input id="editStock" class="date-input" type="number" min="0" max="40" step="1" required>
+ <label class="edit-toggle"><input id="editOrderPending" type="checkbox"> חבילה נוספת כבר הוזמנה וממתינה להגעה</label>
+ <div class="dialog-actions"><button value="cancel" class="secondary-button">ביטול</button><button id="saveTrackingEdits" value="default" class="primary-button">שמור שינויים</button></div>
+ </form></dialog>
 <script src="./runtime-config.js"></script>
 <script type="module" src="./app.js"></script>
 </body></html>

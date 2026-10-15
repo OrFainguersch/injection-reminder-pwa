@@ -9,7 +9,7 @@ const corsOrigin=(request,env)=>{const origin=String(request.headers.get("origin
 const cors=(response,request,env)=>{const headers=new Headers(response.headers);const origin=corsOrigin(request,env);if(origin){headers.set("access-control-allow-origin",origin);headers.set("vary","Origin");}headers.set("access-control-allow-methods","GET,POST,DELETE,OPTIONS");headers.set("access-control-allow-headers","content-type");return new Response(response.body,{status:response.status,statusText:response.statusText,headers});};
 const deviceIdOK=s=>typeof s==="string" && /^[a-f0-9-]{32,64}$/i.test(s);
 const safeSubscription=s=>{try{const u=new URL(s?.endpoint||"");return u.protocol==="https:"&&(u.hostname==="push.apple.com"||u.hostname.endsWith(".push.apple.com")) && !!s?.keys?.auth && !!s?.keys?.p256dh;}catch{return false;}};
-const defaultState=()=>({subscription:null,anchorDate:null,anchorSide:null,timeZone:"Asia/Jerusalem",confirmedDueDates:[],purchaseReminderAt:null,testReminderAt:null});
+const defaultState=()=>({subscription:null,anchorDate:null,anchorSide:null,timeZone:"Asia/Jerusalem",confirmedDueDates:[],purchaseReminderAt:null,testReminderAt:null,orderPending:false,isDepleted:false});
 const dueFor=(anchor,cycle,zone)=>DateTime.fromISO(anchor,{zone}).startOf("day").plus({days:14*(cycle+1)});
 const validSide=side=>side==="right"||side==="left";
 const sideForCycle=(anchorSide,cycle)=>!validSide(anchorSide)?null:(cycle%2===0?(anchorSide==="right"?"left":"right"):anchorSide);
@@ -105,26 +105,52 @@ export class ReminderDevice {
       const b=await request.json().catch(()=>({}));
       const zone=typeof b.timeZone==="string"&&b.timeZone.length<80?b.timeZone:"Asia/Jerusalem";
       if(!/^\d{4}-\d{2}-\d{2}$/.test(b.anchorDate||"")||!DateTime.fromISO(b.anchorDate,{zone}).isValid)return json({error:"invalid_date"},400);
-      const s=await this.state();s.anchorDate=b.anchorDate;s.anchorSide=validSide(b.lastInjectionSide)?b.lastInjectionSide:null;s.timeZone=zone;s.confirmedDueDates=[];s.purchaseReminderAt=null;s.testReminderAt=null;
+      const s=await this.state();s.anchorDate=b.anchorDate;s.anchorSide=validSide(b.lastInjectionSide)?b.lastInjectionSide:null;s.timeZone=zone;s.confirmedDueDates=[];s.purchaseReminderAt=null;s.testReminderAt=null;s.orderPending=false;s.isDepleted=false;
       await this.put(s);await this.schedule();return json({ok:true});
     }
     if(m==="POST"&&p==="/side"){
       const b=await request.json().catch(()=>({}));if(!validSide(b.lastInjectionSide))return json({error:"invalid_side"},400);
       const s=await this.state();if(!s.anchorDate)return json({error:"not_configured"},409);s.anchorSide=b.lastInjectionSide;await this.put(s);await this.schedule();return json({ok:true});
     }
+    if(m==="POST"&&p==="/edit"){
+      const b=await request.json().catch(()=>({})),s=await this.state();
+      if(!s.anchorDate)return json({error:"not_configured"},409);
+      const zone=s.timeZone||"Asia/Jerusalem";
+      if(typeof b.nextDueDate!=="string"||!/^\\d{4}-\\d{2}-\\d{2}$/.test(b.nextDueDate)||!DateTime.fromISO(b.nextDueDate,{zone}).isValid||!validSide(b.nextSide)||!Number.isInteger(b.dosesRemaining)||b.dosesRemaining<0||b.dosesRemaining>40||typeof b.orderPending!=="boolean")return json({error:"invalid_edits"},400);
+      const next=DateTime.fromISO(b.nextDueDate,{zone}).startOf("day");
+      const existing=DateTime.fromISO(s.anchorDate,{zone}).startOf("day");
+      const oldCycle=next.diff(existing,"days").days/14-1;
+      const expectedSide=(oldCycle>=0&&Number.isInteger(oldCycle))?sideForCycle(s.anchorSide,oldCycle):null;
+      const changed=next.toISODate()!==DateTime.fromISO(s.anchorDate,{zone}).plus({days:14}).toISODate()||expectedSide!==b.nextSide;
+      // Editing deliberately reanchors the next occurrence; old confirmed reminders cannot suppress it.
+      s.anchorDate=next.minus({days:14}).toISODate();s.anchorSide=b.nextSide==="right"?"left":"right";s.confirmedDueDates=[];
+      s.orderPending=b.orderPending;s.isDepleted=b.dosesRemaining===0;
+      s.purchaseReminderAt=s.isDepleted&&!s.orderPending?buyReminder(DateTime.now().toISO(),zone):null;
+      await this.put(s);await this.schedule();return json({ok:true,changed});
+    }
+    if(m==="POST"&&p==="/ordered"){
+      const s=await this.state();s.orderPending=true;s.purchaseReminderAt=null;
+      await this.put(s);await this.schedule();return json({ok:true});
+    }
+    if(m==="POST"&&p==="/cancel-order"){
+      const s=await this.state();s.orderPending=false;
+      if(s.isDepleted)s.purchaseReminderAt=buyReminder(DateTime.now().toISO(),s.timeZone||"Asia/Jerusalem");
+      await this.put(s);await this.schedule();return json({ok:true});
+    }
     if(m==="POST"&&p==="/confirm"){
       const b=await request.json().catch(()=>({})),s=await this.state();
       if(!s.anchorDate)return json({error:"not_configured"},409);
       if(typeof b.dueDate!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(b.dueDate))return json({error:"invalid_due"},400);
       s.confirmedDueDates=[...new Set([...(s.confirmedDueDates||[]),b.dueDate])].slice(-80);
-      if(b.packageDepleted===true){
+       s.isDepleted=b.packageDepleted===true;
+      if(s.isDepleted&&!s.orderPending){
         const stamp=typeof b.confirmedAt==="string"&&DateTime.fromISO(b.confirmedAt).isValid?b.confirmedAt:DateTime.now().toISO();
         s.purchaseReminderAt=buyReminder(stamp,s.timeZone||"Asia/Jerusalem");
-      }
+      }else{s.purchaseReminderAt=null;}
       await this.put(s);await this.schedule();return json({ok:true});
     }
     if(m==="POST"&&p==="/purchased"){
-      const s=await this.state();s.purchaseReminderAt=null;await this.put(s);await this.schedule();return json({ok:true});
+      const s=await this.state();s.purchaseReminderAt=null;s.orderPending=false;s.isDepleted=false;await this.put(s);await this.schedule();return json({ok:true});
     }
     if(m==="POST"&&p==="/test-delayed"){
       const s=await this.state();
