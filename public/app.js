@@ -1,5 +1,6 @@
 const STATE_KEY="injectionReminder.state.v2",QUEUE_KEY="injectionReminder.queue.v2";
-const API_BASE_URL=String(window.INJECTION_REMINDER_CONFIG?.apiBaseUrl||"").replace(/\\/$/,"");
+const RAW_API_BASE_URL=String(window.INJECTION_REMINDER_CONFIG?.apiBaseUrl||"");
+const API_BASE_URL=RAW_API_BASE_URL.endsWith("/")?RAW_API_BASE_URL.slice(0,-1):RAW_API_BASE_URL;
 const ids=["installGate","setupView","notificationSetup","homeView","statusPill","recheckInstall","anchorDate","saveSetup","enableNotifications","skipNotifications","countdown","nextDueDate","doseText","doseDots","packageEmpty","confirmInjection","confirmHint","newPackage","historyList","testNotification","resetApp","offlineBanner","pushWarning","toast","confirmDialog","confirmDialogText","dialogConfirmInjection","packageDialog","dialogConfirmPackage"];
 const el=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));
 const defaults=()=>({configured:false,anchorDate:"",nextDueDate:"",dosesRemaining:2,history:[],deviceId:crypto.randomUUID(),notificationSetupSeen:false,pushSynced:false});
