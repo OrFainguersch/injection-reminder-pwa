@@ -28,25 +28,33 @@
  <button id="recheckInstall" class="primary-button" type="button">פתחתי ממסך הבית</button>
 </section>
 <section id="setupView" class="panel hidden">
- <div class="section-heading"><span class="step-badge">1</span><div><h2>הגדרה ראשונית</h2><p>תאריך ההזרקה האחרון וכמה זריקות נותרו בחבילה.</p></div></div>
+ <div class="section-heading"><span class="step-badge">1</span><div><h2>הגדרה ראשונית</h2><p>תאריך ההזרקה האחרון, באיזו ירך הזרקת וכמה זריקות נותרו בחבילה.</p></div></div>
  <label class="field-label" for="anchorDate">תאריך ההזרקה האחרון</label>
  <input id="anchorDate" class="date-input" type="date">
+ <div class="field-label">איפה הזרקת בפעם האחרונה?</div>
+ <div class="segmented" role="group" aria-label="צד ההזרקה האחרון"><button type="button" class="side-choice" data-side="right">ירך ימין</button><button type="button" class="side-choice" data-side="left">ירך שמאל</button></div>
  <div class="field-label">כמה זריקות נשארו בחבילה?</div>
  <div class="segmented" role="group"><button type="button" class="dose-choice" data-dose="1">1</button><button type="button" class="dose-choice selected" data-dose="2">2</button></div>
  <button id="saveSetup" class="primary-button" type="button">שמור והמשך</button>
 </section>
 <section id="notificationSetup" class="panel hidden">
  <div class="section-heading"><span class="step-badge">2</span><div><h2>הפעל התראות</h2><p>לאחר מתן הרשאה תקבל תזכורות גם כשהאפליקציה אינה פתוחה.</p></div></div>
- <div class="notification-preview"><span>🔔</span><div><strong>הגיע הזמן להזריק</strong><div>היום הוא יום ההזרקה שלך.</div></div></div>
+ <div class="notification-preview"><span>🔔</span><div><strong>הגיע הזמן להזריק</strong><div>ההתראה תכלול גם את הירך שבה יש להזריק הפעם.</div></div></div>
  <button id="enableNotifications" class="primary-button" type="button">אפשר התראות</button>
  <button id="skipNotifications" class="text-button" type="button">אמשיך כרגע בלי התראות</button>
 </section>
 <section id="homeView" class="hidden">
+ <section id="missingSidePanel" class="panel side-completion hidden">
+  <h2>השלמת רוטציית ההזרקה</h2>
+  <p>באיזו ירך בוצעה ההזרקה האחרונה? האפליקציה תזכיר מעכשיו את הצד ההפוך בכל פעם.</p>
+  <div class="segmented" role="group" aria-label="צד ההזרקה האחרון"><button type="button" class="side-fix-choice" data-side="right">ירך ימין</button><button type="button" class="side-fix-choice" data-side="left">ירך שמאל</button></div>
+  <button id="saveMissingSide" class="primary-button" type="button">שמור רוטציה</button>
+ </section>
  <div id="offlineBanner" class="banner warning hidden">אין חיבור לאינטרנט. שינויים יסתנכרנו עם חזרת החיבור, אך התראות שכבר נשלחו לא יוכלו להתבטל בדיעבד.</div>
  <button id="pushWarning" class="banner danger hidden" type="button">ההתראות אינן פעילות. לחץ להפעלה.</button>
  <article class="card due-card">
   <div class="card-topline"><span class="card-icon">◷</span><span id="countdown" class="countdown">—</span></div>
-  <div class="centered"><div class="muted">ההזרקה הבאה</div><div id="nextDueDate" class="big-date">—</div></div>
+  <div class="centered"><div class="muted">ההזרקה הבאה</div><div id="nextDueDate" class="big-date">—</div><div id="nextInjectionSide" class="next-side">—</div></div>
   <div class="divider"></div><div class="schedule-copy">ערב קודם ב־20:00 · ביום ההזרקה ב־10:00, 14:00, 18:00 ו־22:00</div>
  </article>
  <article class="card package-card"><div class="row between"><strong>החבילה הנוכחית</strong><span id="doseText">2 מתוך 2</span></div><div id="doseDots" class="dose-dots"></div><div id="packageEmpty" class="package-empty hidden">החבילה הסתיימה — יש לרכוש חדשה</div></article>
@@ -60,5 +68,6 @@
 </div>
 <dialog id="confirmDialog" class="dialog"><form method="dialog"><h3>לאשר שהזרקת?</h3><p id="confirmDialogText"></p><div class="dialog-actions"><button value="cancel" class="secondary-button">ביטול</button><button id="dialogConfirmInjection" class="primary-button" value="default">כן, הזרקתי</button></div></form></dialog>
 <dialog id="packageDialog" class="dialog"><form method="dialog"><h3>חבילה חדשה</h3><p>מונה החבילה יתאפס ל־2 זריקות.</p><div class="dialog-actions"><button value="cancel" class="secondary-button">ביטול</button><button id="dialogConfirmPackage" class="primary-button" value="default">אישור</button></div></form></dialog>
-<script src="./runtime-config.js"></script>\n<script type="module" src="./app.js"></script>
+<script src="./runtime-config.js"></script>
+<script type="module" src="./app.js"></script>
 </body></html>

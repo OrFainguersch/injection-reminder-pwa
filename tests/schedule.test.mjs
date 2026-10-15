@@ -17,7 +17,7 @@ function fakeState(initial = {}) {
 }
 const zone = "Asia/Jerusalem";
 const stamp = (date, hour) => DateTime.fromISO(date,{zone}).startOf("day").set({hour}).toMillis();
-const base = anchorDate => ({anchorDate,timeZone:zone,confirmedDueDates:[],purchaseReminderAt:null,subscription:{endpoint:"mock"}});
+const base = (anchorDate,anchorSide="right") => ({anchorDate,anchorSide,timeZone:zone,confirmedDueDates:[],purchaseReminderAt:null,subscription:{endpoint:"mock"}});
 
 test("13 days after the last injection: reminder is at 20:00 the evening before",()=>{
  const {device}=fakeState();
@@ -25,6 +25,7 @@ test("13 days after the last injection: reminder is at 20:00 the evening before"
  assert.equal(event.kind,"eve");
  assert.equal(event.dueDate,"2026-10-15");
  assert.equal(event.at,stamp("2026-10-14",20));
+ assert.equal(event.side,"left");
 });
 test("day of injection schedules 10,14,18,22 (no later alarms that night)",()=>{
  const {device}=fakeState(),state=base("2026-10-01");
@@ -35,6 +36,7 @@ test("day of injection schedules 10,14,18,22 (no later alarms that night)",()=>{
  const after=device.nextEvent(state,stamp("2026-10-15",23));
  assert.equal(after.kind,"eve");
  assert.equal(after.dueDate,"2026-10-29");
+ assert.equal(after.side,"right");
 });
 test("confirmation skips current due date without shifting 14-day schedule",()=>{
  const {device}=fakeState();
@@ -60,4 +62,29 @@ test("confirmation without empty package does not set purchase reminder",async()
   dueDate:"2026-10-15",confirmedAt:"2026-10-15T11:00:00+03:00",packageDepleted:false
  })}));
  assert.equal(db.get("state").purchaseReminderAt,null);
+});
+
+test("injection side alternates from the last recorded thigh",()=>{
+ const {device}=fakeState(),state=base("2026-10-01","left");
+ const first=device.nextEvent(state,stamp("2026-10-14",19));
+ assert.equal(first.side,"right");
+ const nextState={...state,confirmedDueDates:["2026-10-15"]};
+ const second=device.nextEvent(nextState,stamp("2026-10-15",23));
+ assert.equal(second.dueDate,"2026-10-29");
+ assert.equal(second.side,"left");
+});
+test("side completion updates an existing configured schedule without resetting it",async()=>{
+ const initial={...base("2026-10-01",null),subscription:null,confirmedDueDates:["2026-10-15"],purchaseReminderAt:"2026-10-20T07:00:00.000Z"};
+ const {device,db}=fakeState(initial);
+ const response=await device.fetch(new Request("https://internal/side",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({lastInjectionSide:"right"})}));
+ assert.equal(response.status,200);
+ assert.equal(db.get("state").anchorSide,"right");
+ assert.deepEqual(db.get("state").confirmedDueDates,["2026-10-15"]);
+ assert.equal(db.get("state").purchaseReminderAt,"2026-10-20T07:00:00.000Z");
+});
+test("push copy includes the scheduled thigh and purchase copy remains separate",()=>{
+ const {device}=fakeState();
+ assert.match(device.eventPayload({kind:"eve",dueDate:"2026-10-15",side:"left"}).body,/ירך שמאל/);
+ assert.match(device.eventPayload({kind:"injection",dueDate:"2026-10-15",side:"right"}).body,/ירך ימין/);
+ assert.match(device.eventPayload({kind:"purchase"}).body,/לרכוש חבילה חדשה/);
 });

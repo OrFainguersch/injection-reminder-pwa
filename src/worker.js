@@ -9,8 +9,11 @@ const corsOrigin=(request,env)=>{const origin=String(request.headers.get("origin
 const cors=(response,request,env)=>{const headers=new Headers(response.headers);const origin=corsOrigin(request,env);if(origin){headers.set("access-control-allow-origin",origin);headers.set("vary","Origin");}headers.set("access-control-allow-methods","GET,POST,DELETE,OPTIONS");headers.set("access-control-allow-headers","content-type");return new Response(response.body,{status:response.status,statusText:response.statusText,headers});};
 const deviceIdOK=s=>typeof s==="string" && /^[a-f0-9-]{32,64}$/i.test(s);
 const safeSubscription=s=>{try{const u=new URL(s?.endpoint||"");return u.protocol==="https:"&&(u.hostname==="push.apple.com"||u.hostname.endsWith(".push.apple.com")) && !!s?.keys?.auth && !!s?.keys?.p256dh;}catch{return false;}};
-const defaultState=()=>({subscription:null,anchorDate:null,timeZone:"Asia/Jerusalem",confirmedDueDates:[],purchaseReminderAt:null});
+const defaultState=()=>({subscription:null,anchorDate:null,anchorSide:null,timeZone:"Asia/Jerusalem",confirmedDueDates:[],purchaseReminderAt:null});
 const dueFor=(anchor,cycle,zone)=>DateTime.fromISO(anchor,{zone}).startOf("day").plus({days:14*(cycle+1)});
+const validSide=side=>side==="right"||side==="left";
+const sideForCycle=(anchorSide,cycle)=>!validSide(anchorSide)?null:(cycle%2===0?(anchorSide==="right"?"left":"right"):anchorSide);
+const sideHe=side=>side==="right"?"ירך ימין":side==="left"?"ירך שמאל":"";
 const buyReminder=(iso,zone)=>{let d=DateTime.fromISO(iso,{zone}).startOf("day").plus({days:1}).set({hour:10});if(d.weekday===6)d=d.plus({days:1});return d.toUTC().toISO();};
 
 export class PushConfig {
@@ -39,8 +42,9 @@ export class ReminderDevice {
   async send(subscription,payload){return sendPushNotification(subscription,payload,await this.vapid(),{ttl:86400,urgency:"high"});}
   eventPayload(event){
     if(event.kind==="purchase")return {title:"החבילה הסתיימה",body:"השתמשת בזריקה השנייה בחבילה. הגיע הזמן לרכוש חבילה חדשה.",url:"",tag:"package-purchase"};
-    if(event.kind==="eve")return {title:"תזכורת להזרקה",body:"מחר יום ההזרקה שלך.",url:"",tag:"eve-"+event.dueDate};
-    return {title:"הגיע הזמן להזריק",body:"היום הוא יום ההזרקה. היכנס לאפליקציה ואשר לאחר שהזרקת.",url:"",tag:"due-"+event.dueDate};
+    const side=sideHe(event.side),suffix=side?` הפעם: ${side}.`:"";
+    if(event.kind==="eve")return {title:"תזכורת להזרקה",body:"מחר יום ההזרקה שלך."+suffix,url:"",tag:"eve-"+event.dueDate};
+    return {title:"הגיע הזמן להזריק",body:"היום הוא יום ההזרקה."+suffix+" היכנס לאפליקציה ואשר לאחר שהזרקת.",url:"",tag:"due-"+event.dueDate};
   }
   nextEvent(state,after=Date.now()){
     const events=[];
@@ -56,10 +60,11 @@ export class ReminderDevice {
         const due=dueFor(state.anchorDate,cycle,zone),key=due.toISODate();
         if(confirmed.has(key))continue;
         const eve=due.minus({days:1}).set({hour:20,minute:0,second:0,millisecond:0}).toMillis();
-        if(eve>after)events.push({kind:"eve",at:eve,dueDate:key});
+        const side=sideForCycle(state.anchorSide,cycle);
+        if(eve>after)events.push({kind:"eve",at:eve,dueDate:key,side});
         for(const hour of HOURS){
           const at=due.set({hour,minute:0,second:0,millisecond:0}).toMillis();
-          if(at>after)events.push({kind:"injection",at,dueDate:key});
+          if(at>after)events.push({kind:"injection",at,dueDate:key,side});
         }
       }
     }
@@ -97,8 +102,12 @@ export class ReminderDevice {
       const b=await request.json().catch(()=>({}));
       const zone=typeof b.timeZone==="string"&&b.timeZone.length<80?b.timeZone:"Asia/Jerusalem";
       if(!/^\d{4}-\d{2}-\d{2}$/.test(b.anchorDate||"")||!DateTime.fromISO(b.anchorDate,{zone}).isValid)return json({error:"invalid_date"},400);
-      const s=await this.state();s.anchorDate=b.anchorDate;s.timeZone=zone;s.confirmedDueDates=[];s.purchaseReminderAt=null;
+      const s=await this.state();s.anchorDate=b.anchorDate;s.anchorSide=validSide(b.lastInjectionSide)?b.lastInjectionSide:null;s.timeZone=zone;s.confirmedDueDates=[];s.purchaseReminderAt=null;
       await this.put(s);await this.schedule();return json({ok:true});
+    }
+    if(m==="POST"&&p==="/side"){
+      const b=await request.json().catch(()=>({}));if(!validSide(b.lastInjectionSide))return json({error:"invalid_side"},400);
+      const s=await this.state();if(!s.anchorDate)return json({error:"not_configured"},409);s.anchorSide=b.lastInjectionSide;await this.put(s);await this.schedule();return json({ok:true});
     }
     if(m==="POST"&&p==="/confirm"){
       const b=await request.json().catch(()=>({})),s=await this.state();

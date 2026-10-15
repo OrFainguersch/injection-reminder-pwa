@@ -1,15 +1,17 @@
 const STATE_KEY="injectionReminder.state.v2",QUEUE_KEY="injectionReminder.queue.v2";
 const RAW_API_BASE_URL=String(window.INJECTION_REMINDER_CONFIG?.apiBaseUrl||"");
 const API_BASE_URL=RAW_API_BASE_URL.endsWith("/")?RAW_API_BASE_URL.slice(0,-1):RAW_API_BASE_URL;
-const ids=["installGate","setupView","notificationSetup","homeView","statusPill","recheckInstall","anchorDate","saveSetup","enableNotifications","skipNotifications","countdown","nextDueDate","doseText","doseDots","packageEmpty","confirmInjection","confirmHint","newPackage","historyList","testNotification","resetApp","offlineBanner","pushWarning","toast","confirmDialog","confirmDialogText","dialogConfirmInjection","packageDialog","dialogConfirmPackage"];
+const ids=["installGate","setupView","notificationSetup","homeView","statusPill","recheckInstall","anchorDate","saveSetup","enableNotifications","skipNotifications","countdown","nextDueDate","nextInjectionSide","doseText","doseDots","packageEmpty","confirmInjection","confirmHint","newPackage","historyList","testNotification","resetApp","offlineBanner","pushWarning","toast","confirmDialog","confirmDialogText","dialogConfirmInjection","packageDialog","dialogConfirmPackage","missingSidePanel","saveMissingSide"];
 const el=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));
-const defaults=()=>({configured:false,anchorDate:"",nextDueDate:"",dosesRemaining:2,history:[],deviceId:crypto.randomUUID(),notificationSetupSeen:false,pushSynced:false});
+const defaults=()=>({configured:false,anchorDate:"",nextDueDate:"",lastInjectionSide:null,nextInjectionSide:null,dosesRemaining:2,history:[],deviceId:crypto.randomUUID(),notificationSetupSeen:false,pushSynced:false});
 function load(){try{return {...defaults(),...(JSON.parse(localStorage.getItem(STATE_KEY))||{})};}catch{return defaults();}}
-let state=load(),selectedDose=2,toastTimer;
+let state=load(),selectedDose=2,selectedSide=null,toastTimer;
 const save=()=>localStorage.setItem(STATE_KEY,JSON.stringify(state));
 const isoLocal=d=>[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
 const parseDate=s=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d,12);};
 const addDays=(s,n)=>{const d=parseDate(s);d.setDate(d.getDate()+n);return isoLocal(d);};
+const oppositeSide=side=>side==="right"?"left":side==="left"?"right":null;
+const sideLabel=side=>side==="right"?"ירך ימין":side==="left"?"ירך שמאל":"יש להשלים צד";
 const formatDate=s=>s?new Intl.DateTimeFormat("he-IL",{weekday:"long",day:"numeric",month:"long",year:"numeric"}).format(parseDate(s)):"—";
 function daysUntil(s){const n=new Date();return Math.round((parseDate(s)-new Date(n.getFullYear(),n.getMonth(),n.getDate(),12))/86400000);}
 function countdown(s){const n=daysUntil(s);return n===0?"היום":n===1?"מחר":n>1?`בעוד ${n} ימים`:n===-1?"באיחור של יום":`באיחור של ${-n} ימים`;}
@@ -78,7 +80,7 @@ function notifyStatus(){
 function renderHistory(){
  if(!state.history.length){el.historyList.innerHTML='<div class="history-empty">עדיין אין הזרקות שנרשמו.</div>';return;}
  const fmt=new Intl.DateTimeFormat("he-IL",{dateStyle:"medium",timeStyle:"short"});
- el.historyList.innerHTML=state.history.slice().reverse().map(x=>`<div class="history-item"><div><strong>${formatDate(x.scheduledDate)}</strong><br><span>מועד מתוכנן</span></div><span>${fmt.format(new Date(x.confirmedAt))}</span></div>`).join("");
+ el.historyList.innerHTML=state.history.slice().reverse().map(x=>`<div class="history-item"><div><strong>${formatDate(x.scheduledDate)}</strong><br><span>${x.injectionSide?sideLabel(x.injectionSide)+" · ":""}מועד מתוכנן</span></div><span>${fmt.format(new Date(x.confirmedAt))}</span></div>`).join("");
 }
 function render(){
  const needInstall=ios()&&!standalone();
@@ -87,8 +89,10 @@ function render(){
  el.notificationSetup.classList.toggle("hidden",needInstall||!state.configured||state.notificationSetupSeen);
  el.homeView.classList.toggle("hidden",needInstall||!state.configured||!state.notificationSetupSeen);
  el.offlineBanner.classList.toggle("hidden",navigator.onLine);
+ el.missingSidePanel.classList.toggle("hidden",!state.configured||!!state.nextInjectionSide);
  if(state.configured){
   el.nextDueDate.textContent=formatDate(state.nextDueDate);
+  el.nextInjectionSide.textContent=sideLabel(state.nextInjectionSide);
   el.countdown.textContent=countdown(state.nextDueDate);
   el.countdown.classList.toggle("overdue",daysUntil(state.nextDueDate)<=0);
   el.doseText.textContent=`${state.dosesRemaining} מתוך 2`;
@@ -105,19 +109,21 @@ async function configure(){
  const anchorDate=el.anchorDate.value;
  if(!/^\d{4}-\d{2}-\d{2}$/.test(anchorDate))return toast("בחר תאריך הזרקה.");
  if(parseDate(anchorDate)>new Date())return toast("לא ניתן לבחור תאריך עתידי.");
- state.configured=true;state.anchorDate=anchorDate;state.nextDueDate=addDays(anchorDate,14);state.dosesRemaining=selectedDose;state.history=[];state.notificationSetupSeen=false;
+ if(!selectedSide)return toast("בחר באיזו ירך בוצעה ההזרקה האחרונה.");
+ state.configured=true;state.anchorDate=anchorDate;state.nextDueDate=addDays(anchorDate,14);state.lastInjectionSide=selectedSide;state.nextInjectionSide=oppositeSide(selectedSide);state.dosesRemaining=selectedDose;state.history=[];state.notificationSetupSeen=false;
  save();render();
- try{await device("/configure",{anchorDate,timeZone:timezone()},"POST",true);}
+ try{await device("/configure",{anchorDate,timeZone:timezone(),lastInjectionSide:selectedSide},"POST",true);}
  catch{toast("ההגדרה נשמרה. חיבור ההתראות יסתנכרן כשיהיה אינטרנט.");}
 }
 async function confirmInjection(){
  if(!dueNow())return;
- const dueDate=state.nextDueDate,confirmedAt=new Date().toISOString();
- state.history.push({scheduledDate:dueDate,confirmedAt});
+ if(!state.nextInjectionSide)return toast("יש להשלים קודם את צד ההזרקה האחרונה.");
+ const dueDate=state.nextDueDate,confirmedAt=new Date().toISOString(),injectionSide=state.nextInjectionSide;
+ state.history.push({scheduledDate:dueDate,confirmedAt,injectionSide});
  state.dosesRemaining=Math.max(0,state.dosesRemaining-1);
- state.nextDueDate=addDays(dueDate,14);
+ state.nextDueDate=addDays(dueDate,14);state.lastInjectionSide=injectionSide;state.nextInjectionSide=oppositeSide(injectionSide);
  save();render();
- try{await device("/confirm",{dueDate,confirmedAt,packageDepleted:state.dosesRemaining===0},"POST",true);toast("ההזרקה נרשמה והתזכורות העתידיות למועד זה בוטלו.");}
+ try{await device("/confirm",{dueDate,confirmedAt,injectionSide,packageDepleted:state.dosesRemaining===0},"POST",true);toast("ההזרקה נרשמה והתזכורות העתידיות למועד זה בוטלו.");}
  catch{toast("ההזרקה נשמרה במכשיר. התראות בשרת יבוטלו לאחר חזרת החיבור.");}
 }
 async function purchased(){
@@ -127,13 +133,21 @@ async function purchased(){
 }
 async function reset(){
  if(!confirm("למחוק את כל הנתונים ולהתחיל מחדש?"))return;
- try{await device("/reset",undefined,"DELETE");}catch{toast("איפוס השרת נכשל; ודא שהחיבור לאינטרנט פעיל לפני מחיקת ההגדרות.");return;}
- localStorage.removeItem(STATE_KEY);localStorage.removeItem(QUEUE_KEY);state=defaults();selectedDose=2;save();render();
+ try{await device("/reset",undefined,"DELETE");}catch{}
+ localStorage.removeItem(STATE_KEY);localStorage.removeItem(QUEUE_KEY);state=defaults();selectedDose=2;selectedSide=null;save();render();
 }
 function bind(){
+ const chooseSide=button=>{selectedSide=button.dataset.side;document.querySelectorAll(".side-choice,.side-fix-choice").forEach(b=>b.classList.toggle("selected",b.dataset.side===selectedSide));};
+ document.querySelectorAll(".side-choice,.side-fix-choice").forEach(button=>button.addEventListener("click",()=>chooseSide(button)));
  document.querySelectorAll(".dose-choice").forEach(button=>button.addEventListener("click",()=>{selectedDose=Number(button.dataset.dose);document.querySelectorAll(".dose-choice").forEach(b=>b.classList.toggle("selected",b===button));}));
  el.recheckInstall.addEventListener("click",()=>location.reload());
  el.saveSetup.addEventListener("click",configure);
+ el.saveMissingSide.addEventListener("click",async()=>{
+  if(!selectedSide)return toast("בחר ירך ימין או ירך שמאל.");
+  state.lastInjectionSide=selectedSide;state.nextInjectionSide=oppositeSide(selectedSide);save();render();
+  try{await device("/side",{lastInjectionSide:selectedSide},"POST",true);toast("הרוטציה נשמרה. ההזרקה הבאה תהיה ב"+sideLabel(state.nextInjectionSide)+".");}
+  catch{toast("הרוטציה נשמרה במכשיר ותסתנכרן עם שרת ההתראות.");}
+ });
  el.skipNotifications.addEventListener("click",()=>{state.notificationSetupSeen=true;save();render();});
  el.enableNotifications.addEventListener("click",async()=>{
   el.enableNotifications.disabled=true;
@@ -142,7 +156,7 @@ function bind(){
   finally{el.enableNotifications.disabled=false;}
  });
  el.pushWarning.addEventListener("click",async()=>{try{await subscribe(true);toast("ההתראות הופעלו.");}catch{toast("לא ניתן להפעיל התראות כעת.");}render();});
- el.confirmInjection.addEventListener("click",()=>{el.confirmDialogText.textContent=`האישור יתייחס למועד המתוכנן ${formatDate(state.nextDueDate)}. ההזרקה הבאה תישאר 14 יום לאחר המועד המתוכנן הזה.`;el.confirmDialog.showModal();});
+ el.confirmInjection.addEventListener("click",()=>{if(!state.nextInjectionSide)return toast("יש להשלים קודם את צד ההזרקה האחרונה.");el.confirmDialogText.textContent=`האישור יתייחס למועד המתוכנן ${formatDate(state.nextDueDate)}, ${sideLabel(state.nextInjectionSide)}. ההזרקה הבאה תישאר 14 יום לאחר המועד המתוכנן הזה ובצד ההפוך.`;el.confirmDialog.showModal();});
  el.dialogConfirmInjection.addEventListener("click",e=>{e.preventDefault();el.confirmDialog.close();confirmInjection();});
  el.newPackage.addEventListener("click",()=>el.packageDialog.showModal());
  el.dialogConfirmPackage.addEventListener("click",e=>{e.preventDefault();el.packageDialog.close();purchased();});
