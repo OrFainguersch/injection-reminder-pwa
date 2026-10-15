@@ -1,1 +1,5 @@
-// Injection Reminder frontend configuration.\n// Kept separate from FLYMPUS on purpose.\nwindow.INJECTION_REMINDER_CONFIG = {\n  apiBaseUrl: ""\n};\n
+// Injection Reminder frontend configuration.
+// This app and its notification backend are isolated from FLYMPUS.
+window.INJECTION_REMINDER_CONFIG = {
+  apiBaseUrl: ""
+};
