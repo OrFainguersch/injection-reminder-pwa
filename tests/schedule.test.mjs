@@ -88,3 +88,25 @@ test("push copy includes the scheduled thigh and purchase copy remains separate"
  assert.match(device.eventPayload({kind:"injection",dueDate:"2026-10-15",side:"right"}).body,/ירך ימין/);
  assert.match(device.eventPayload({kind:"purchase"}).body,/לרכוש חבילה חדשה/);
 });
+
+test("delayed test schedules a real server-side alarm without changing medical schedule",async()=>{
+ const initial={...base("2026-10-01"),testReminderAt:null};
+ const {device,db}=fakeState(initial);
+ const response=await device.fetch(new Request("https://internal/test-delayed",{method:"POST"}));
+ assert.equal(response.status,200);
+ const body=await response.json();
+ assert.equal(body.delaySeconds,60);
+ const saved=db.get("state");
+ assert.equal(saved.anchorDate,"2026-10-01");
+ assert.equal(saved.anchorSide,"right");
+ assert.equal(saved.confirmedDueDates.length,0);
+ const event=device.nextEvent(saved,Date.now());
+ assert.equal(event.kind,"test");
+ assert.ok(event.at>Date.now()+49000 && event.at<Date.now()+71000);
+ assert.match(device.eventPayload(event).body,/Push/);
+});
+test("delayed test requires an existing push subscription",async()=>{
+ const {device}=fakeState({...base("2026-10-01"),subscription:null});
+ const response=await device.fetch(new Request("https://internal/test-delayed",{method:"POST"}));
+ assert.equal(response.status,409);
+});

@@ -160,7 +160,16 @@ function bind(){
  el.dialogConfirmInjection.addEventListener("click",e=>{e.preventDefault();el.confirmDialog.close();confirmInjection();});
  el.newPackage.addEventListener("click",()=>el.packageDialog.showModal());
  el.dialogConfirmPackage.addEventListener("click",e=>{e.preventDefault();el.packageDialog.close();purchased();});
- el.testNotification.addEventListener("click",async()=>{try{await subscribe(true);const r=await device("/test",{});if(!r.ok)throw Error("not_sent");toast("נשלחה התראת בדיקה.");}catch{toast("הבדיקה נכשלה. בדוק הרשאות וחיבור לאינטרנט.");}render();});
+ el.testNotification.addEventListener("click",async()=>{
+  el.testNotification.disabled=true;
+  try{
+    await subscribe(true);
+    const r=await device("/test-delayed",{});
+    if(!r.ok)throw Error("not_scheduled");
+    toast("התראת בדיקה תגיע בעוד דקה. נעל את האייפון ובדוק.");
+  }catch{toast("בדיקת ההתראות נכשלה. בדוק הרשאות וחיבור לאינטרנט.");}
+  finally{el.testNotification.disabled=false;render();}
+ });
  el.resetApp.addEventListener("click",reset);
  window.addEventListener("online",async()=>{render();await flush();if("Notification" in window&&Notification.permission==="granted"){try{await subscribe(false);}catch{}}render();});
  window.addEventListener("offline",render);

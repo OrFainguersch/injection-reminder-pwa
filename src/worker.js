@@ -9,7 +9,7 @@ const corsOrigin=(request,env)=>{const origin=String(request.headers.get("origin
 const cors=(response,request,env)=>{const headers=new Headers(response.headers);const origin=corsOrigin(request,env);if(origin){headers.set("access-control-allow-origin",origin);headers.set("vary","Origin");}headers.set("access-control-allow-methods","GET,POST,DELETE,OPTIONS");headers.set("access-control-allow-headers","content-type");return new Response(response.body,{status:response.status,statusText:response.statusText,headers});};
 const deviceIdOK=s=>typeof s==="string" && /^[a-f0-9-]{32,64}$/i.test(s);
 const safeSubscription=s=>{try{const u=new URL(s?.endpoint||"");return u.protocol==="https:"&&(u.hostname==="push.apple.com"||u.hostname.endsWith(".push.apple.com")) && !!s?.keys?.auth && !!s?.keys?.p256dh;}catch{return false;}};
-const defaultState=()=>({subscription:null,anchorDate:null,anchorSide:null,timeZone:"Asia/Jerusalem",confirmedDueDates:[],purchaseReminderAt:null});
+const defaultState=()=>({subscription:null,anchorDate:null,anchorSide:null,timeZone:"Asia/Jerusalem",confirmedDueDates:[],purchaseReminderAt:null,testReminderAt:null});
 const dueFor=(anchor,cycle,zone)=>DateTime.fromISO(anchor,{zone}).startOf("day").plus({days:14*(cycle+1)});
 const validSide=side=>side==="right"||side==="left";
 const sideForCycle=(anchorSide,cycle)=>!validSide(anchorSide)?null:(cycle%2===0?(anchorSide==="right"?"left":"right"):anchorSide);
@@ -41,6 +41,7 @@ export class ReminderDevice {
   }
   async send(subscription,payload){return sendPushNotification(subscription,payload,await this.vapid(),{ttl:86400,urgency:"high"});}
   eventPayload(event){
+    if(event.kind==="test")return {title:"בדיקת תזכורת הזרקה",body:"התראת Push התקבלה גם כשהאפליקציה אינה פתוחה.",url:"",tag:"injection-reminder-delayed-test"};
     if(event.kind==="purchase")return {title:"החבילה הסתיימה",body:"השתמשת בזריקה השנייה בחבילה. הגיע הזמן לרכוש חבילה חדשה.",url:"",tag:"package-purchase"};
     const side=sideHe(event.side),suffix=side?` הפעם: ${side}.`:"";
     if(event.kind==="eve")return {title:"תזכורת להזרקה",body:"מחר יום ההזרקה שלך."+suffix,url:"",tag:"eve-"+event.dueDate};
@@ -48,6 +49,7 @@ export class ReminderDevice {
   }
   nextEvent(state,after=Date.now()){
     const events=[];
+    if(state.testReminderAt){const ms=Date.parse(state.testReminderAt);if(ms>after)events.push({kind:"test",at:ms});}
     if(state.purchaseReminderAt){const ms=Date.parse(state.purchaseReminderAt);if(ms>after)events.push({kind:"purchase",at:ms});}
     if(state.anchorDate){
       const zone=state.timeZone||"Asia/Jerusalem";
@@ -83,6 +85,7 @@ export class ReminderDevice {
     const s=await this.state(),e=await this.ctx.storage.get("scheduledEvent");
     if(!e){await this.schedule();return;}
     if(e.kind==="purchase")s.purchaseReminderAt=null;
+    if(e.kind==="test")s.testReminderAt=null;
     if(s.subscription){
       try{const ok=await this.send(s.subscription,this.eventPayload(e));if(!ok)s.subscription=null;}
       catch(error){console.error("Push delivery failed",String(error));}
@@ -102,7 +105,7 @@ export class ReminderDevice {
       const b=await request.json().catch(()=>({}));
       const zone=typeof b.timeZone==="string"&&b.timeZone.length<80?b.timeZone:"Asia/Jerusalem";
       if(!/^\d{4}-\d{2}-\d{2}$/.test(b.anchorDate||"")||!DateTime.fromISO(b.anchorDate,{zone}).isValid)return json({error:"invalid_date"},400);
-      const s=await this.state();s.anchorDate=b.anchorDate;s.anchorSide=validSide(b.lastInjectionSide)?b.lastInjectionSide:null;s.timeZone=zone;s.confirmedDueDates=[];s.purchaseReminderAt=null;
+      const s=await this.state();s.anchorDate=b.anchorDate;s.anchorSide=validSide(b.lastInjectionSide)?b.lastInjectionSide:null;s.timeZone=zone;s.confirmedDueDates=[];s.purchaseReminderAt=null;s.testReminderAt=null;
       await this.put(s);await this.schedule();return json({ok:true});
     }
     if(m==="POST"&&p==="/side"){
@@ -122,6 +125,13 @@ export class ReminderDevice {
     }
     if(m==="POST"&&p==="/purchased"){
       const s=await this.state();s.purchaseReminderAt=null;await this.put(s);await this.schedule();return json({ok:true});
+    }
+    if(m==="POST"&&p==="/test-delayed"){
+      const s=await this.state();
+      if(!s.subscription)return json({error:"not_subscribed"},409);
+      s.testReminderAt=DateTime.now().plus({seconds:60}).toUTC().toISO();
+      await this.put(s);await this.schedule();
+      return json({ok:true,delaySeconds:60});
     }
     if(m==="POST"&&p==="/test"){
       const s=await this.state();if(!s.subscription)return json({error:"not_subscribed"},409);
