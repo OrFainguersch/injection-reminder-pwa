@@ -19,7 +19,7 @@ self.addEventListener("fetch",event=>{
 self.addEventListener("push",event=>{
  let payload={title:"תזכורת הזרקה",body:"יש לך תזכורת.",url:"/",tag:"injection-reminder"};
  try{if(event.data)payload={...payload,...event.data.json()};}catch{}
- event.waitUntil(self.registration.showNotification(payload.title,{body:payload.body,icon:"/icons/icon.svg",badge:"/icons/icon.svg",tag:payload.tag,data:{url:payload.url||"/"},silent:false}));
+ event.waitUntil(self.registration.showNotification(payload.title,{body:payload.body,icon:"/icons/apple-touch-icon.png",badge:"/icons/apple-touch-icon.png",tag:payload.tag,data:{url:payload.url||"/"},silent:false}));
 });
 self.addEventListener("notificationclick",event=>{
  event.notification.close();
