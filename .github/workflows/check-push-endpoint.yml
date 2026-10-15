@@ -1,0 +1,40 @@
+name: Verify deployed push API
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe public Worker config and CORS
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://injection-reminder.8kby84m5m9.workers.dev"
+          for i in 1 2 3 4 5; do
+            status=$(curl --retry 1 --connect-timeout 8 --max-time 20 -sS -o /tmp/config.json -w '%{http_code}' "$BASE/api/config" || true)
+            echo "Config probe $i: HTTP $status"
+            if [[ "$status" == "200" ]] && node -e 'const fs=require("fs");const d=JSON.parse(fs.readFileSync("/tmp/config.json"));const key=d.publicKey||d.vapidPublicKey; if(typeof key!=="string"||key.length<60) process.exit(1)'; then
+              break
+            fi
+            if [[ "$i" == "5" ]]; then
+              echo "Remote API config unavailable or invalid; response:"
+              head -c 800 /tmp/config.json || true
+              exit 1
+            fi
+            sleep 5
+          done
+          curl --fail --silent --show-error --max-time 20 \
+            -D /tmp/cors-headers.txt -o /dev/null \
+            -X OPTIONS "$BASE/api/device/test-id/subscription" \
+            -H "Origin: https://orfainguersch.github.io" \
+            -H "Access-Control-Request-Method: POST" \
+            -H "Access-Control-Request-Headers: content-type"
+          if ! grep -qi '^access-control-allow-origin: https://orfainguersch.github.io' /tmp/cors-headers.txt; then
+            echo "CORS header is missing"
+            cat /tmp/cors-headers.txt
+            exit 1
+          fi
+          echo "Remote Worker API and cross-origin preflight verified."
