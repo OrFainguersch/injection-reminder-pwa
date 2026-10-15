@@ -1,4 +1,5 @@
-const STATE_KEY="injectionReminder.state.v2",QUEUE_KEY="injectionReminder.queue.v2";\nconst API_BASE_URL=String(window.INJECTION_REMINDER_CONFIG?.apiBaseUrl||"").replace(/\\/$/,"");
+const STATE_KEY="injectionReminder.state.v2",QUEUE_KEY="injectionReminder.queue.v2";
+const API_BASE_URL=String(window.INJECTION_REMINDER_CONFIG?.apiBaseUrl||"").replace(/\\/$/,"");
 const ids=["installGate","setupView","notificationSetup","homeView","statusPill","recheckInstall","anchorDate","saveSetup","enableNotifications","skipNotifications","countdown","nextDueDate","doseText","doseDots","packageEmpty","confirmInjection","confirmHint","newPackage","historyList","testNotification","resetApp","offlineBanner","pushWarning","toast","confirmDialog","confirmDialogText","dialogConfirmInjection","packageDialog","dialogConfirmPackage"];
 const el=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));
 const defaults=()=>({configured:false,anchorDate:"",nextDueDate:"",dosesRemaining:2,history:[],deviceId:crypto.randomUUID(),notificationSetupSeen:false,pushSynced:false});
@@ -19,7 +20,8 @@ function toast(message){clearTimeout(toastTimer);el.toast.textContent=message;el
 function queue(path,body,method){let q=[];try{q=JSON.parse(localStorage.getItem(QUEUE_KEY)||"[]");}catch{}q.push({path,body,method});localStorage.setItem(QUEUE_KEY,JSON.stringify(q.slice(-60)));}
 async function device(path,body,method="POST",queueFailure=false){
  try{
-  if(!API_BASE_URL)throw Error("backend_unavailable");\n  const response=await fetch(`${API_BASE_URL}/api/device/${encodeURIComponent(state.deviceId)}${path}`,{method,headers:body===undefined?undefined:{"content-type":"application/json"},body:body===undefined?undefined:JSON.stringify(body)});
+  if(!API_BASE_URL)throw Error("backend_unavailable");
+  const response=await fetch(`${API_BASE_URL}/api/device/${encodeURIComponent(state.deviceId)}${path}`,{method,headers:body===undefined?undefined:{"content-type":"application/json"},body:body===undefined?undefined:JSON.stringify(body)});
   if(!response.ok)throw Error("HTTP "+response.status);
   return await response.json();
  }catch(err){if(queueFailure)queue(path,body,method);throw err;}
@@ -49,7 +51,8 @@ async function subscribe(userGesture=false){
  if(permission==="default"&&userGesture)permission=await Notification.requestPermission();
  if(permission!=="granted")throw Error("permission_required");
  const registration=await registerServiceWorker();
- if(!API_BASE_URL)throw Error("backend_unavailable");\n const response=await fetch(`${API_BASE_URL}/api/config`,{cache:"no-store"});
+ if(!API_BASE_URL)throw Error("backend_unavailable");
+ const response=await fetch(`${API_BASE_URL}/api/config`,{cache:"no-store"});
  if(!response.ok)throw Error("config_failed");
  const {publicKey,vapidPublicKey}=await response.json();
  const key=publicKey||vapidPublicKey;
