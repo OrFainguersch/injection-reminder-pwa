@@ -1,7 +1,7 @@
 const STATE_KEY="injectionReminder.state.v2",QUEUE_KEY="injectionReminder.queue.v2";
 const RAW_API_BASE_URL=String(window.INJECTION_REMINDER_CONFIG?.apiBaseUrl||"");
 const API_BASE_URL=RAW_API_BASE_URL.endsWith("/")?RAW_API_BASE_URL.slice(0,-1):RAW_API_BASE_URL;
-const ids=["installGate","setupView","notificationSetup","homeView","statusPill","recheckInstall","anchorDate","saveSetup","enableNotifications","skipNotifications","countdown","nextDueDate","nextInjectionSide","doseText","doseDots","packageEmpty","confirmInjection","confirmHint","newPackage","historyList","testNotification","resetApp","offlineBanner","pushWarning","toast","confirmDialog","confirmDialogText","dialogConfirmInjection","packageDialog","dialogConfirmPackage","missingSidePanel","saveMissingSide"];
+const ids=["installGate","setupView","notificationSetup","homeView","statusPill","recheckInstall","anchorDate","saveSetup","enableNotifications","skipNotifications","countdown","nextDueDate","nextInjectionSide","doseText","doseDots","packageEmpty","confirmInjection","confirmHint","newPackage","historyList","testNotification","resetApp","offlineBanner","pushWarning","toast","confirmDialog","confirmDialogText","dialogConfirmInjection","packageDialog","dialogConfirmPackage","missingSidePanel","saveMissingSide","pushDiagnostics"];
 const el=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));
 const defaults=()=>({configured:false,anchorDate:"",nextDueDate:"",lastInjectionSide:null,nextInjectionSide:null,dosesRemaining:2,history:[],deviceId:crypto.randomUUID(),notificationSetupSeen:false,pushSynced:false});
 function load(){try{return {...defaults(),...(JSON.parse(localStorage.getItem(STATE_KEY))||{})};}catch{return defaults();}}
@@ -45,22 +45,50 @@ function decodeKey(base64){
  const padded=(base64+"=".repeat((4-base64.length%4)%4)).replace(/-/g,"+").replace(/_/g,"/");
  return Uint8Array.from(atob(padded),char=>char.charCodeAt(0));
 }
+
+let pushStage="בדיקת התאימות";
+const setPushStage=stage=>{pushStage=stage};
+function showPushFailure(error){
+ const code=String(error?.name||"Error");
+ const detail=String(error?.message||"unknown").slice(0,160);
+ const permission=("Notification" in window)?Notification.permission:"unsupported";
+ let help="נסה שוב כשהאפליקציה פתוחה ממסך הבית ויש חיבור לאינטרנט.";
+ if(detail==="denied"||permission==="denied"||code==="NotAllowedError")help="פתח הגדרות iPhone ← עדכונים ← תזכורת הזרקה, ואפשר התראות.";
+ else if(detail==="unsupported"||detail==="install_required")help="פתח את האפליקציה מהאייקון במסך הבית, ולא מלשונית Safari.";
+ else if(detail==="permission_required")help="יש לאשר את בקשת ההרשאה של iOS.";
+ else if(detail==="backend_unavailable"||detail==="config_failed"||detail.startsWith("HTTP ")||code==="TypeError")help="לא הושלם החיבור לשרת ההתראות. ודא שקיים חיבור אינטרנט ונסה שוב.";
+ const text="הבדיקה נעצרה בשלב: "+pushStage+". הרשאת iOS: "+permission+". שגיאה: "+code+" / "+detail+". "+help;
+ el.pushDiagnostics.textContent=text;
+ el.pushDiagnostics.classList.remove("hidden");
+ toast("בדיקת ההתראות נכשלה — פרטים מופיעים בתחתית ההגדרות.");
+}
+function clearPushFailure(){
+ el.pushDiagnostics.textContent="";
+ el.pushDiagnostics.classList.add("hidden");
+}
 async function subscribe(userGesture=false){
+ setPushStage("בדיקת תמיכת iOS והתקנה");
  if(ios()&&!standalone())throw Error("install_required");
  if(!("Notification" in window)||!("PushManager" in window))throw Error("unsupported");
  if(Notification.permission==="denied")throw Error("denied");
  // Ask before the first await so iOS recognizes the user interaction.
+ setPushStage("בקשת הרשאה להתראות ב-iPhone");
  let permission=Notification.permission;
  if(permission==="default"&&userGesture)permission=await Notification.requestPermission();
  if(permission!=="granted")throw Error("permission_required");
+ setPushStage("הפעלת Service Worker");
  const registration=await registerServiceWorker();
+ setPushStage("חיבור ל-Cloudflare לקבלת מפתח Push");
  if(!API_BASE_URL)throw Error("backend_unavailable");
  const response=await fetch(`${API_BASE_URL}/api/config`,{cache:"no-store"});
  if(!response.ok)throw Error("config_failed");
  const {publicKey,vapidPublicKey}=await response.json();
  const key=publicKey||vapidPublicKey;
+ if(typeof key!=="string"||!key)throw Error("invalid_vapid_key");
+ setPushStage("רישום המכשיר ב-Apple Push");
  let subscription=await registration.pushManager.getSubscription();
  if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:decodeKey(key)});
+ setPushStage("שמירת הרשמת המכשיר ב-Cloudflare");
  await device("/subscription",{subscription:subscription.toJSON()});
  state.pushSynced=true;save();return true;
 }
@@ -162,12 +190,14 @@ function bind(){
  el.dialogConfirmPackage.addEventListener("click",e=>{e.preventDefault();el.packageDialog.close();purchased();});
  el.testNotification.addEventListener("click",async()=>{
   el.testNotification.disabled=true;
+  clearPushFailure();
   try{
     await subscribe(true);
+    setPushStage("תזמון הודעת בדיקה ב-Cloudflare");
     const r=await device("/test-delayed",{});
     if(!r.ok)throw Error("not_scheduled");
     toast("התראת בדיקה תגיע בעוד דקה. נעל את האייפון ובדוק.");
-  }catch{toast("בדיקת ההתראות נכשלה. בדוק הרשאות וחיבור לאינטרנט.");}
+  }catch(error){showPushFailure(error);}
   finally{el.testNotification.disabled=false;render();}
  });
  el.resetApp.addEventListener("click",reset);
