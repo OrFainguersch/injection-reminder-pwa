@@ -19,5 +19,7 @@ jobs:
           node --check public/app.js
           node --check public/sw.js
           node --check src/worker.js
+      - name: Run schedule regression tests
+        run: node --test tests/*.test.mjs
       - name: Verify Cloudflare Worker bundles
         run: npx wrangler deploy --dry-run --outdir=dist
