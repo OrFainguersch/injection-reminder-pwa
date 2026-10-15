@@ -1,0 +1,1 @@
+// Injection Reminder frontend configuration.\n// Kept separate from FLYMPUS on purpose.\nwindow.INJECTION_REMINDER_CONFIG = {\n  apiBaseUrl: ""\n};\n
