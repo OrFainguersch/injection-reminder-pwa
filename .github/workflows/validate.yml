@@ -1,0 +1,23 @@
+name: Validate PWA
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Check JavaScript syntax
+        run: |
+          node --check public/app.js
+          node --check public/sw.js
+          node --check src/worker.js
+      - name: Verify Cloudflare Worker bundles
+        run: npx wrangler deploy --dry-run --outdir=dist
