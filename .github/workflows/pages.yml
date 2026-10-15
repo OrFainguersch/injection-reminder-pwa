@@ -20,17 +20,42 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Gate production revision
+        id: gate
+        continue-on-error: true
+        run: |
+          set -e
+          node --check public/app.js
+          node --check public/sw.js
+          node --check src/worker.js
+          node --test tests/*.test.mjs
+          npx wrangler deploy --dry-run --outdir=dist
+      - name: Report blocked deployment
+        if: steps.gate.outcome != 'success'
+        run: |
+          echo "::warning::GitHub Pages deployment blocked because validation failed."
+          echo "## ⛔ Deployment blocked" >> "$GITHUB_STEP_SUMMARY"
+          echo "The currently published PWA was left unchanged because this revision failed validation." >> "$GITHUB_STEP_SUMMARY"
       - name: Configure Pages
+        if: steps.gate.outcome == 'success'
         uses: actions/configure-pages@v5
         with:
           enablement: true
       - name: Upload static site
+        if: steps.gate.outcome == 'success'
         uses: actions/upload-pages-artifact@v3
         with:
           path: public
       - name: Deploy to GitHub Pages
+        if: steps.gate.outcome == 'success'
         id: deployment
         uses: actions/deploy-pages@v4

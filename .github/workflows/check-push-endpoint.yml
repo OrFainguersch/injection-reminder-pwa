@@ -1,4 +1,4 @@
-name: Verify deployed push API
+name: Verify deployed push API (email quiet)
 on:
   push:
     branches: [main]
@@ -8,7 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe public Worker config and CORS
+      - name: Probe public Worker config, CORS and isolated storage
+        id: probe
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -20,7 +22,7 @@ jobs:
               break
             fi
             if [[ "$i" == "5" ]]; then
-              echo "Remote API config unavailable or invalid; response:"
+              echo "Remote API config unavailable or invalid"
               head -c 800 /tmp/config.json || true
               exit 1
             fi
@@ -32,13 +34,7 @@ jobs:
             -H "Origin: https://orfainguersch.github.io" \
             -H "Access-Control-Request-Method: POST" \
             -H "Access-Control-Request-Headers: content-type"
-          if ! grep -qi '^access-control-allow-origin: https://orfainguersch.github.io' /tmp/cors-headers.txt; then
-            echo "CORS header is missing"
-            cat /tmp/cors-headers.txt
-            exit 1
-          fi
-          echo "Remote Worker API and cross-origin preflight verified."
-          # Test the device Durable Object on a throwaway random ID. Never use the real iPhone ID.
+          grep -qi '^access-control-allow-origin: https://orfainguersch.github.io' /tmp/cors-headers.txt
           TEST_ID="$(cat /proc/sys/kernel/random/uuid)"
           DATA='{"subscription":{"endpoint":"https://web.push.apple.com/diagnostic-not-a-real-device","keys":{"auth":"diagnostic","p256dh":"diagnostic"}}}'
           trap 'curl --silent --show-error --max-time 20 -X DELETE "$BASE/api/device/$TEST_ID/reset" >/dev/null || true' EXIT
@@ -46,17 +42,16 @@ jobs:
             -H "Origin: https://orfainguersch.github.io" \
             -H "Content-Type: application/json" \
             -X POST "$BASE/api/device/$TEST_ID/subscription" -d "$DATA")
-          echo "Isolated device registration: HTTP $status"
-          if [[ "$status" != "200" ]]; then
-            head -c 900 /tmp/device.json || true
-            exit 1
-          fi
-          status=$(curl --silent --show-error --max-time 20 -o /tmp/status.json -w '%{http_code}' \
-            "$BASE/api/device/$TEST_ID/status")
-          echo "Isolated device status: HTTP $status"
-          if [[ "$status" != "200" ]]; then
-            head -c 900 /tmp/status.json || true
-            exit 1
-          fi
+          [[ "$status" == "200" ]]
+          status=$(curl --silent --show-error --max-time 20 -o /tmp/status.json -w '%{http_code}' "$BASE/api/device/$TEST_ID/status")
+          [[ "$status" == "200" ]]
           node -e 'const d=require("/tmp/status.json");if(d.subscribed!==true)process.exit(1)'
-          echo "Durable Object registration, status, and cleanup passed."
+      - name: Surface endpoint result without failure email
+        if: always()
+        run: |
+          if [ "${{ steps.probe.outcome }}" != "success" ]; then
+            echo "::warning::Injection Reminder push endpoint verification failed. Check the Worker before relying on scheduled alerts."
+            echo "## ⚠️ Push endpoint verification failed" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## ✅ Push endpoint verified" >> "$GITHUB_STEP_SUMMARY"
+          fi

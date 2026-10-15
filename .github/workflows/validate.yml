@@ -1,4 +1,4 @@
-name: Validate PWA
+name: Validate PWA (email quiet)
 on:
   push:
     branches: [main]
@@ -14,12 +14,24 @@ jobs:
           node-version: '22'
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Check JavaScript syntax
+      - name: Validate application revision
+        id: checks
+        continue-on-error: true
         run: |
+          set -e
           node --check public/app.js
           node --check public/sw.js
           node --check src/worker.js
-      - name: Run schedule regression tests
-        run: node --test tests/*.test.mjs
-      - name: Verify Cloudflare Worker bundles
-        run: npx wrangler deploy --dry-run --outdir=dist
+          node --test tests/*.test.mjs
+          npx wrangler deploy --dry-run --outdir=dist
+      - name: Surface validation result without failure email
+        if: always()
+        run: |
+          if [ "${{ steps.checks.outcome }}" != "success" ]; then
+            echo "::warning::Injection Reminder validation failed. This revision must not be treated as releasable."
+            echo "## ⚠️ Validation failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "The failed revision was not considered safe to release. See the validation step for details." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## ✅ Validation passed" >> "$GITHUB_STEP_SUMMARY"
+            echo "Syntax, schedule regression tests and Worker dry-run all passed." >> "$GITHUB_STEP_SUMMARY"
+          fi
