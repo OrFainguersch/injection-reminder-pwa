@@ -38,3 +38,25 @@ jobs:
             exit 1
           fi
           echo "Remote Worker API and cross-origin preflight verified."
+          # Test the device Durable Object on a throwaway random ID. Never use the real iPhone ID.
+          TEST_ID="$(cat /proc/sys/kernel/random/uuid)"
+          DATA='{"subscription":{"endpoint":"https://web.push.apple.com/diagnostic-not-a-real-device","keys":{"auth":"diagnostic","p256dh":"diagnostic"}}}'
+          trap 'curl --silent --show-error --max-time 20 -X DELETE "$BASE/api/device/$TEST_ID/reset" >/dev/null || true' EXIT
+          status=$(curl --silent --show-error --max-time 20 -o /tmp/device.json -w '%{http_code}' \
+            -H "Origin: https://orfainguersch.github.io" \
+            -H "Content-Type: application/json" \
+            -X POST "$BASE/api/device/$TEST_ID/subscription" -d "$DATA")
+          echo "Isolated device registration: HTTP $status"
+          if [[ "$status" != "200" ]]; then
+            head -c 900 /tmp/device.json || true
+            exit 1
+          fi
+          status=$(curl --silent --show-error --max-time 20 -o /tmp/status.json -w '%{http_code}' \
+            "$BASE/api/device/$TEST_ID/status")
+          echo "Isolated device status: HTTP $status"
+          if [[ "$status" != "200" ]]; then
+            head -c 900 /tmp/status.json || true
+            exit 1
+          fi
+          node -e 'const d=require("/tmp/status.json");if(d.subscribed!==true)process.exit(1)'
+          echo "Durable Object registration, status, and cleanup passed."
