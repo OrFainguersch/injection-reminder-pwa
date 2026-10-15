@@ -1,4 +1,4 @@
-const STATE_KEY="injectionReminder.state.v2",QUEUE_KEY="injectionReminder.queue.v2";
+const STATE_KEY="injectionReminder.state.v2",QUEUE_KEY="injectionReminder.queue.v2";\nconst API_BASE_URL=String(window.INJECTION_REMINDER_CONFIG?.apiBaseUrl||"").replace(/\\/$/,"");
 const ids=["installGate","setupView","notificationSetup","homeView","statusPill","recheckInstall","anchorDate","saveSetup","enableNotifications","skipNotifications","countdown","nextDueDate","doseText","doseDots","packageEmpty","confirmInjection","confirmHint","newPackage","historyList","testNotification","resetApp","offlineBanner","pushWarning","toast","confirmDialog","confirmDialogText","dialogConfirmInjection","packageDialog","dialogConfirmPackage"];
 const el=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));
 const defaults=()=>({configured:false,anchorDate:"",nextDueDate:"",dosesRemaining:2,history:[],deviceId:crypto.randomUUID(),notificationSetupSeen:false,pushSynced:false});
@@ -19,7 +19,7 @@ function toast(message){clearTimeout(toastTimer);el.toast.textContent=message;el
 function queue(path,body,method){let q=[];try{q=JSON.parse(localStorage.getItem(QUEUE_KEY)||"[]");}catch{}q.push({path,body,method});localStorage.setItem(QUEUE_KEY,JSON.stringify(q.slice(-60)));}
 async function device(path,body,method="POST",queueFailure=false){
  try{
-  const response=await fetch(`/api/device/${encodeURIComponent(state.deviceId)}${path}`,{method,headers:body===undefined?undefined:{"content-type":"application/json"},body:body===undefined?undefined:JSON.stringify(body)});
+  if(!API_BASE_URL)throw Error("backend_unavailable");\n  const response=await fetch(`${API_BASE_URL}/api/device/${encodeURIComponent(state.deviceId)}${path}`,{method,headers:body===undefined?undefined:{"content-type":"application/json"},body:body===undefined?undefined:JSON.stringify(body)});
   if(!response.ok)throw Error("HTTP "+response.status);
   return await response.json();
  }catch(err){if(queueFailure)queue(path,body,method);throw err;}
@@ -33,7 +33,7 @@ async function flush(){
 }
 async function registerServiceWorker(){
  if(!("serviceWorker" in navigator))throw Error("unsupported");
- await navigator.serviceWorker.register("/sw.js");
+ await navigator.serviceWorker.register("./sw.js",{scope:"./"});
  return navigator.serviceWorker.ready;
 }
 function decodeKey(base64){
@@ -49,7 +49,7 @@ async function subscribe(userGesture=false){
  if(permission==="default"&&userGesture)permission=await Notification.requestPermission();
  if(permission!=="granted")throw Error("permission_required");
  const registration=await registerServiceWorker();
- const response=await fetch("/api/config",{cache:"no-store"});
+ if(!API_BASE_URL)throw Error("backend_unavailable");\n const response=await fetch(`${API_BASE_URL}/api/config`,{cache:"no-store"});
  if(!response.ok)throw Error("config_failed");
  const {publicKey,vapidPublicKey}=await response.json();
  const key=publicKey||vapidPublicKey;
@@ -60,6 +60,12 @@ async function subscribe(userGesture=false){
 }
 function notifyStatus(){
  const granted=("Notification" in window)&&Notification.permission==="granted"&&(!ios()||standalone());
+ if(!API_BASE_URL){
+  el.statusPill.textContent="Push בהכנה";
+  el.statusPill.className="status-pill";
+  el.pushWarning.classList.add("hidden");
+  return;
+ }
  const active=granted&&state.pushSynced;
  el.statusPill.textContent=active?"התראות פעילות":granted?"יש לבדוק חיבור התראות":"התראות כבויות";
  el.statusPill.className="status-pill "+(active?"ok":"bad");
@@ -128,7 +134,7 @@ function bind(){
  el.enableNotifications.addEventListener("click",async()=>{
   el.enableNotifications.disabled=true;
   try{await subscribe(true);state.notificationSetupSeen=true;save();render();toast("ההתראות הופעלו.");}
-  catch(e){toast(e.message==="denied"?"יש לאפשר התראות בהגדרות iPhone.":"הפעלת ההתראות נכשלה. בדוק חיבור והרשאות.");}
+  catch(e){toast(e.message==="denied"?"יש לאפשר התראות בהגדרות iPhone.":e.message==="backend_unavailable"?"האפליקציה מוכנה; שרת ההתראות יחובר בשלב הבא.":"הפעלת ההתראות נכשלה. בדוק חיבור והרשאות.");}
   finally{el.enableNotifications.disabled=false;}
  });
  el.pushWarning.addEventListener("click",async()=>{try{await subscribe(true);toast("ההתראות הופעלו.");}catch{toast("לא ניתן להפעיל התראות כעת.");}render();});
