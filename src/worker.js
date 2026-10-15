@@ -4,6 +4,9 @@ import { sendPushNotification } from "@mmmike/web-push/send";
 
 const json = (value, status=200) => new Response(JSON.stringify(value), {status,headers:{"content-type":"application/json;charset=utf-8","cache-control":"no-store"}});
 const HOURS=[10,14,18,22];
+const DEFAULT_FRONTEND_ORIGIN="https://orfainguersch.github.io";
+const corsOrigin=(request,env)=>{const origin=String(request.headers.get("origin")||"");const configured=String(env.FRONTEND_ORIGIN||DEFAULT_FRONTEND_ORIGIN).trim();return origin&&origin===configured?origin:"";};
+const cors=(response,request,env)=>{const headers=new Headers(response.headers);const origin=corsOrigin(request,env);if(origin){headers.set("access-control-allow-origin",origin);headers.set("vary","Origin");}headers.set("access-control-allow-methods","GET,POST,DELETE,OPTIONS");headers.set("access-control-allow-headers","content-type");return new Response(response.body,{status:response.status,statusText:response.statusText,headers});};
 const deviceIdOK=s=>typeof s==="string" && /^[a-f0-9-]{32,64}$/i.test(s);
 const safeSubscription=s=>{try{const u=new URL(s?.endpoint||"");return u.protocol==="https:"&&(u.hostname==="push.apple.com"||u.hostname.endsWith(".push.apple.com")) && !!s?.keys?.auth && !!s?.keys?.p256dh;}catch{return false;}};
 const defaultState=()=>({subscription:null,anchorDate:null,timeZone:"Asia/Jerusalem",confirmedDueDates:[],purchaseReminderAt:null});
@@ -35,9 +38,9 @@ export class ReminderDevice {
   }
   async send(subscription,payload){return sendPushNotification(subscription,payload,await this.vapid(),{ttl:86400,urgency:"high"});}
   eventPayload(event){
-    if(event.kind==="purchase")return {title:"החבילה הסתיימה",body:"השתמשת בזריקה השנייה בחבילה. הגיע הזמן לרכוש חבילה חדשה.",url:"/",tag:"package-purchase"};
-    if(event.kind==="eve")return {title:"תזכורת להזרקה",body:"מחר יום ההזרקה שלך.",url:"/",tag:"eve-"+event.dueDate};
-    return {title:"הגיע הזמן להזריק",body:"היום הוא יום ההזרקה. היכנס לאפליקציה ואשר לאחר שהזרקת.",url:"/",tag:"due-"+event.dueDate};
+    if(event.kind==="purchase")return {title:"החבילה הסתיימה",body:"השתמשת בזריקה השנייה בחבילה. הגיע הזמן לרכוש חבילה חדשה.",url:"",tag:"package-purchase"};
+    if(event.kind==="eve")return {title:"תזכורת להזרקה",body:"מחר יום ההזרקה שלך.",url:"",tag:"eve-"+event.dueDate};
+    return {title:"הגיע הזמן להזריק",body:"היום הוא יום ההזרקה. היכנס לאפליקציה ואשר לאחר שהזרקת.",url:"",tag:"due-"+event.dueDate};
   }
   nextEvent(state,after=Date.now()){
     const events=[];
@@ -113,7 +116,7 @@ export class ReminderDevice {
     }
     if(m==="POST"&&p==="/test"){
       const s=await this.state();if(!s.subscription)return json({error:"not_subscribed"},409);
-      try{return json({ok:await this.send(s.subscription,{title:"בדיקת התראה",body:"ההתראות של תזכורת ההזרקה פועלות.",url:"/",tag:"push-test"})});}
+      try{return json({ok:await this.send(s.subscription,{title:"בדיקת התראה",body:"ההתראות של תזכורת ההזרקה פועלות.",url:"",tag:"push-test"})});}
       catch(e){console.error(String(e));return json({error:"push_failed"},502);}
     }
     if(m==="DELETE"&&p==="/reset"){await this.ctx.storage.deleteAll();await this.ctx.storage.deleteAlarm();return json({ok:true});}
@@ -124,16 +127,17 @@ export class ReminderDevice {
 export default {
   async fetch(request,env){
     const url=new URL(request.url);
+    if(url.pathname.startsWith("/api/")&&request.method==="OPTIONS")return cors(new Response(null,{status:204}),request,env);
     if(request.method==="GET"&&url.pathname==="/api/config"){
       const stub=env.PUSH_CONFIG.get(env.PUSH_CONFIG.idFromName("global"));
-      return stub.fetch("https://internal/keys");
+      return cors(await stub.fetch("https://internal/keys"),request,env);
     }
     const m=url.pathname.match(/^\/api\/device\/([^/]+)(\/.*)$/);
     if(m){
-      const id=decodeURIComponent(m[1]);if(!deviceIdOK(id))return json({error:"invalid_device_id"},400);
+      const id=decodeURIComponent(m[1]);if(!deviceIdOK(id))return cors(json({error:"invalid_device_id"},400),request,env);
       const stub=env.REMINDER_DEVICE.get(env.REMINDER_DEVICE.idFromName(id));
       const target=new URL(request.url);target.pathname=m[2];
-      return stub.fetch(new Request(target,request));
+      return cors(await stub.fetch(new Request(target,request)),request,env);
     }
     return env.ASSETS.fetch(request);
   }
