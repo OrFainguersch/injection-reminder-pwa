@@ -116,7 +116,7 @@ export class ReminderDevice {
       const b=await request.json().catch(()=>({})),s=await this.state();
       if(!s.anchorDate)return json({error:"not_configured"},409);
       const zone=s.timeZone||"Asia/Jerusalem";
-      if(typeof b.nextDueDate!=="string"||!/^\\d{4}-\\d{2}-\\d{2}$/.test(b.nextDueDate)||!DateTime.fromISO(b.nextDueDate,{zone}).isValid||!validSide(b.nextSide)||!Number.isInteger(b.dosesRemaining)||b.dosesRemaining<0||b.dosesRemaining>40||typeof b.orderPending!=="boolean")return json({error:"invalid_edits"},400);
+      if(typeof b.nextDueDate!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(b.nextDueDate)||!DateTime.fromISO(b.nextDueDate,{zone}).isValid||!validSide(b.nextSide)||!Number.isInteger(b.dosesRemaining)||b.dosesRemaining<0||b.dosesRemaining>40||typeof b.orderPending!=="boolean")return json({error:"invalid_edits"},400);
       const next=DateTime.fromISO(b.nextDueDate,{zone}).startOf("day");
       const existing=DateTime.fromISO(s.anchorDate,{zone}).startOf("day");
       const oldCycle=next.diff(existing,"days").days/14-1;
