@@ -7,10 +7,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="תזכורת הזרקה">
-  <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="./icons/icon.svg">
+  <link rel="stylesheet" href="./styles.css">
   <title>תזכורת הזרקה</title>
 </head>
 <body>
@@ -60,5 +60,5 @@
 </div>
 <dialog id="confirmDialog" class="dialog"><form method="dialog"><h3>לאשר שהזרקת?</h3><p id="confirmDialogText"></p><div class="dialog-actions"><button value="cancel" class="secondary-button">ביטול</button><button id="dialogConfirmInjection" class="primary-button" value="default">כן, הזרקתי</button></div></form></dialog>
 <dialog id="packageDialog" class="dialog"><form method="dialog"><h3>חבילה חדשה</h3><p>מונה החבילה יתאפס ל־2 זריקות.</p><div class="dialog-actions"><button value="cancel" class="secondary-button">ביטול</button><button id="dialogConfirmPackage" class="primary-button" value="default">אישור</button></div></form></dialog>
-<script type="module" src="/app.js"></script>
+<script src="./runtime-config.js"></script>\n<script type="module" src="./app.js"></script>
 </body></html>
