@@ -179,7 +179,7 @@ function openTrackingEditor(){
 }
 async function applyTrackingEdits(){
  const date=el.editNextDue.value,side=el.editNextSide.value,stock=Number(el.editStock.value),ordered=el.editOrderPending.checked;
- if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||isoLocal(parseDate(date))!==date)return toast("בחר תאריך תקין.");
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||isoLocal(parseDate(date))!==date)return toast("בחר תאריך תקין.");
  if(side!=="left"&&side!=="right")return toast("בחר צד הזרקה.");
  if(!Number.isInteger(stock)||stock<0||stock>40)return toast("יש להזין מלאי בין 0 ל־40.");
  if(!navigator.onLine)return toast("עריכת המועד מחייבת חיבור לשרת ההתראות. נסה לאחר חיבור לאינטרנט.");
