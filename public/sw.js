@@ -1,4 +1,4 @@
-const CACHE="injection-reminder-v3";
+const CACHE="injection-reminder-v4";
 const ROOT=new URL("./",self.location.href);
 const asset=(path="")=>new URL(path,ROOT).href;
 const SHELL=[asset(""),asset("styles.css"),asset("app.js"),asset("runtime-config.js"),asset("manifest.webmanifest"),asset("icons/icon.svg"),asset("icons/apple-touch-icon.png")];
