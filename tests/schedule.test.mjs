@@ -136,3 +136,44 @@ test("ordering stops purchase reminder, receipt and cancellation are independent
  assert.equal(db.get("state").purchaseReminderAt,null);
  assert.equal(db.get("state").isDepleted,false);
 });
+
+
+test("custom evening and injection-day times are used by the real scheduler",()=>{
+ const {device}=fakeState();
+ const s={...base("2026-10-01"),notificationPreferences:{eve:true,eveTime:"19:15",dayTimes:["09:30","16:45"],purchase:true,purchaseTime:"11:15"}};
+ assert.equal(device.nextEvent(s,stamp("2026-10-14",19)).at,stamp("2026-10-14",19)+15*60*1000);
+ assert.equal(device.nextEvent(s,stamp("2026-10-14",20)).at,stamp("2026-10-15",9)+30*60*1000);
+ assert.equal(device.nextEvent(s,stamp("2026-10-15",10)).at,stamp("2026-10-15",16)+45*60*1000);
+});
+test("disabled evening and injection alerts leave the purchase workflow unaffected",()=>{
+ const {device}=fakeState();
+ const s={...base("2026-10-01"),notificationPreferences:{eve:false,eveTime:"20:00",dayTimes:[],purchase:true,purchaseTime:"10:00"},purchaseReminderAt:DateTime.fromISO("2026-10-17T10:00:00",{zone}).toUTC().toISO()};
+ const e=device.nextEvent(s,stamp("2026-10-15",9));
+ assert.equal(e.kind,"purchase");
+ assert.equal(e.at,stamp("2026-10-17",10));
+});
+test("changing notification settings reschedules without modifying injection history or anchor",async()=>{
+ const initial={...base("2026-10-01"),confirmedDueDates:["2026-10-15"],subscription:null};
+ const {device,db}=fakeState(initial);
+ const preferences={eve:false,eveTime:"18:00",dayTimes:["08:15"],purchase:false,purchaseTime:"13:30"};
+ const response=await device.fetch(new Request("https://internal/notifications",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({preferences})}));
+ assert.equal(response.status,200);
+ const s=db.get("state");
+ assert.equal(s.anchorDate,"2026-10-01");assert.deepEqual(s.confirmedDueDates,["2026-10-15"]);
+ assert.deepEqual(s.notificationPreferences,preferences);
+ const e=device.nextEvent(s,stamp("2026-10-28",19));
+ assert.equal(e.kind,"injection");assert.equal(e.at,stamp("2026-10-29",8)+15*60*1000);
+});
+test("invalid notification settings are rejected without mutation",async()=>{
+ const initial=base("2026-10-01");const {device,db}=fakeState(initial);
+ const response=await device.fetch(new Request("https://internal/notifications",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({preferences:{eve:true,eveTime:"25:30",dayTimes:["10:00"],purchase:true,purchaseTime:"10:00"}})}));
+ assert.equal(response.status,400);
+ assert.equal(db.get("state").notificationPreferences,undefined);
+});
+test("purchase reminder time obeys the user's preferences",async()=>{
+ const initial={...base("2026-10-01"),subscription:null,notificationPreferences:{eve:true,eveTime:"20:00",dayTimes:["10:00"],purchase:true,purchaseTime:"13:45"}};
+ const {device,db}=fakeState(initial);
+ const response=await device.fetch(new Request("https://internal/confirm",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({dueDate:"2026-10-15",confirmedAt:"2026-10-16T21:00:00+03:00",packageDepleted:true})}));
+ assert.equal(response.status,200);
+ assert.equal(db.get("state").purchaseReminderAt,DateTime.fromISO("2026-10-18T13:45:00",{zone}).toUTC().toISO());
+});
