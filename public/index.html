@@ -17,8 +17,9 @@
 <div class="app-shell">
 <header class="topbar">
  <div><div class="eyebrow">INJECTION REMINDER</div><h1>תזכורת הזרקה</h1></div>
- <span id="statusPill" class="status-pill">בודק התראות…</span>
+ <div class="topbar-actions"><span id="statusPill" class="status-pill">בודק התראות…</span><button id="openSettings" class="menu-button" type="button" aria-label="פתיחת תפריט הגדרות" title="הגדרות"><span aria-hidden="true">☰</span></button></div>
 </header>
+<div id="pullIndicator" class="pull-indicator" role="status" aria-live="polite"><span class="pull-spinner" aria-hidden="true">↻</span><span id="pullText">משוך לריענון</span></div>
 <main>
 <section id="installGate" class="panel hidden">
  <div class="hero-icon">＋</div>
@@ -54,8 +55,19 @@
  <button id="pushWarning" class="banner danger hidden" type="button">ההתראות אינן פעילות. לחץ להפעלה.</button>
  <article class="card due-card">
   <div class="card-topline"><span class="card-icon">◷</span><span id="countdown" class="countdown">—</span></div>
-  <div class="centered"><div class="muted">ההזרקה הבאה</div><div id="nextDueDate" class="big-date">—</div><div id="nextInjectionSide" class="next-side">—</div></div>
-  <div class="divider"></div><div class="schedule-copy">ערב קודם ב־20:00 · ביום ההזרקה ב־10:00, 14:00, 18:00 ו־22:00</div>
+  <div class="due-visual">
+    <div id="dueGauge" class="due-gauge" role="img" aria-label="ימים עד ההזרקה הבאה">
+     <svg viewBox="0 0 200 133" aria-hidden="true" focusable="false">
+      <path d="M 24 108 A 83 83 0 0 1 87 19" class="gauge-arc gauge-green"/>
+      <path d="M 92 18 A 83 83 0 0 1 175 84" class="gauge-arc gauge-amber"/>
+      <path d="M 176 89 A 83 83 0 0 1 177 108" class="gauge-arc gauge-red"/>
+      <g id="gaugeNeedle" class="gauge-needle"><line x1="100" y1="104" x2="100" y2="38"/><circle cx="100" cy="104" r="6"/></g>
+     </svg>
+     <div class="gauge-number"><strong id="gaugeDays">—</strong><span id="gaugeLabel">ימים</span></div>
+    </div>
+    <div class="centered"><div class="muted">ההזרקה הבאה</div><div id="nextDueDate" class="big-date">—</div><div id="nextInjectionSide" class="next-side">—</div></div>
+   </div>
+  <div class="divider"></div><div id="scheduleCopy" class="schedule-copy">טוען הגדרות התראות…</div>
  </article>
  <article class="card package-card"><div class="row between"><strong>החבילה הנוכחית</strong><span id="doseText">2 מתוך 2</span></div><div id="doseDots" class="dose-dots"></div><div id="packageEmpty" class="package-empty hidden">החבילה הסתיימה — יש לרכוש חדשה</div></article>
  <button id="confirmInjection" class="primary-button confirm-button" type="button">✓ &nbsp; הזרקתי</button>
@@ -65,26 +77,34 @@
  <button id="newPackage" class="secondary-button" type="button">קיבלתי חבילה (+2 זריקות)</button>
  </div>
  <section class="subsection"><div class="subsection-title">היסטוריית הזרקות</div><div id="historyList" class="history-list"></div></section>
- <section class="subsection settings-section"><div class="subsection-title">הגדרות</div>
- <button id="editTracking" class="settings-row" type="button">עריכת המועד, הירך והמלאי <span>‹</span></button>
- <button id="refreshTracking" class="settings-row" type="button">רענון וסנכרון <span>‹</span></button>
- <button id="testNotification" class="settings-row" type="button">בדיקת התראה (בעוד דקה) <span>‹</span></button><div id="pushDiagnostics" class="push-diagnostics hidden" role="status" aria-live="polite"></div><button id="resetApp" class="settings-row destructive" type="button">איפוס כל הנתונים <span>‹</span></button></section>
+
 </section>
 </main><div id="toast" class="toast hidden" role="status"></div>
 </div>
+<dialog id="settingsDrawer" class="drawer dialog" aria-labelledby="drawerHeading"><div class="drawer-head"><h3 id="drawerHeading">הגדרות</h3><button id="closeSettings" type="button" class="icon-button" aria-label="סגור תפריט">✕</button></div><p class="drawer-subtitle">העדפות וניהול האפליקציה</p><div class="drawer-actions"><button id="manageNotifications" class="settings-row" type="button"><span>🔔 &nbsp;עריכת התראות ותזמון</span><span>‹</span></button><button id="editTracking" class="settings-row" type="button"><span>◷ &nbsp;עריכת מועד, ירך ומלאי</span><span>‹</span></button><button id="refreshTracking" class="settings-row" type="button"><span>↻ &nbsp;רענון וסנכרון</span><span>‹</span></button><div id="pushDiagnostics" class="push-diagnostics hidden" role="status" aria-live="polite"></div><button id="resetApp" class="settings-row destructive" type="button"><span>איפוס כל הנתונים</span><span>‹</span></button></div></dialog>
 <dialog id="confirmDialog" class="dialog"><form method="dialog"><h3>לאשר שהזרקת?</h3><p id="confirmDialogText"></p><div class="dialog-actions"><button value="cancel" class="secondary-button">ביטול</button><button id="dialogConfirmInjection" class="primary-button" value="default">כן, הזרקתי</button></div></form></dialog>
 <dialog id="packageDialog" class="dialog"><form method="dialog"><h3>קיבלתי חבילה חדשה</h3><p>שתי זריקות יתווספו למלאי הקיים. הזמנה פתוחה תסומן כהתקבלה, והתראת רכישה ממתינה תבוטל.</p><div class="dialog-actions"><button value="cancel" class="secondary-button">ביטול</button><button id="dialogConfirmPackage" class="primary-button" value="default">אישור</button></div></form></dialog>
 <dialog id="editTrackingDialog" class="dialog"><form method="dialog">
  <h3>עריכת פרטי מעקב</h3>
  <p>אפשר לתקן את ההזרקה הבאה, את הירך ואת המלאי. שינוי המועד יתזמן מחדש את ההתראות אך לא ימחק הזרקות קודמות.</p>
  <label class="field-label" for="editNextDue">תאריך ההזרקה הבאה</label>
- <input id="editNextDue" class="date-input" type="date" required>
+ <input id="editNextDue" type="hidden">
+ <button id="editDateToggle" class="date-input calendar-toggle" type="button" aria-controls="editCalendar" aria-expanded="false"><span id="editDateText">בחר תאריך</span><span aria-hidden="true">▾</span></button>
+ <div id="editCalendar" class="inline-calendar hidden" aria-label="בחירת תאריך"><div class="calendar-heading"><button id="calendarPrev" class="icon-button" type="button" aria-label="חודש קודם">‹</button><strong id="calendarMonth"></strong><button id="calendarNext" class="icon-button" type="button" aria-label="חודש הבא">›</button></div><div class="calendar-weekdays" aria-hidden="true"><span>א</span><span>ב</span><span>ג</span><span>ד</span><span>ה</span><span>ו</span><span>ש</span></div><div id="calendarGrid" class="calendar-grid"></div></div>
  <label class="field-label" for="editNextSide">הירך להזרקה הבאה</label>
  <select id="editNextSide" class="date-input"><option value="right">ירך ימין</option><option value="left">ירך שמאל</option></select>
  <label class="field-label" for="editStock">מספר זריקות זמינות (בכל חבילה 2)</label>
  <input id="editStock" class="date-input" type="number" min="0" max="40" step="1" required>
  <label class="edit-toggle"><input id="editOrderPending" type="checkbox"> חבילה נוספת כבר הוזמנה וממתינה להגעה</label>
  <div class="dialog-actions"><button value="cancel" class="secondary-button">ביטול</button><button id="saveTrackingEdits" value="default" class="primary-button">שמור שינויים</button></div>
+ </form></dialog>
+<dialog id="notificationDialog" class="dialog prefs-dialog" aria-labelledby="prefsTitle"><form method="dialog">
+ <h3 id="prefsTitle">עריכת התראות</h3>
+ <p class="dialog-description">בחר אילו תזכורות יישלחו ומתי. שינוי כאן אינו משנה את מועד ההזרקה.</p>
+ <div class="pref-group"><label class="pref-heading"><input id="eveEnabled" type="checkbox"><span>תזכורת ערב לפני ההזרקה</span></label><label class="compact-field" for="eveTime">בשעה <select id="eveTime" class="compact-select"></select></label></div>
+ <div class="pref-group"><div class="pref-heading"><span>תזכורות ביום ההזרקה</span></div><p class="pref-hint">בחר שעות רצויות. לאחר אישור ״הזרקתי״ התזכורות לאותו מועד ייפסקו.</p><div id="injectionTimes" class="reminder-times"></div><button id="addInjectionTime" class="add-time-button" type="button">＋ הוסף שעת תזכורת</button></div>
+ <div class="pref-group"><label class="pref-heading"><input id="purchaseEnabled" type="checkbox"><span>תזכורת לרכישת חבילה כשנגמר המלאי</span></label><label class="compact-field" for="purchaseTime">בשעה <select id="purchaseTime" class="compact-select"></select></label><p class="pref-hint">ביום שלאחר סיום המלאי; בשבת התזכורת נדחית ליום ראשון.</p></div>
+ <div class="dialog-actions"><button value="cancel" class="secondary-button">ביטול</button><button id="saveNotifications" class="primary-button" type="button">שמור התראות</button></div>
  </form></dialog>
 <script src="./runtime-config.js"></script>
 <script type="module" src="./app.js"></script>
