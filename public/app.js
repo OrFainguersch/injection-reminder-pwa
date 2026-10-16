@@ -257,7 +257,8 @@ function openTrackingEditor(){
  el.editNextSide.value=state.nextInjectionSide||"right";
  el.editStock.value=state.dosesRemaining;
  el.editOrderPending.checked=!!state.orderPending;
- el.editTrackingDialog.showModal();
+ calendarDate=parseDate(state.nextDueDate);el.editDateText.textContent=formatDate(state.nextDueDate);showCalendar(false);
+ showModal(el.editTrackingDialog);
 }
 async function applyTrackingEdits(){
  const date=el.editNextDue.value,side=el.editNextSide.value,stock=Number(el.editStock.value),ordered=el.editOrderPending.checked;
@@ -278,10 +279,12 @@ async function applyTrackingEdits(){
  finally{el.saveTrackingEdits.disabled=false;}
 }
 async function refreshTracking(){
+ if(el.refreshTracking.disabled)return;
  el.refreshTracking.disabled=true;
  try{
+  if(!navigator.onLine){render();toast("אין אינטרנט כרגע. ניתן לסנכרן כשיש חיבור.");return;}
   await flush();
-  await navigator.serviceWorker.getRegistration("./").then(reg=>reg?.update()).catch(()=>null);
+  if("serviceWorker" in navigator)await navigator.serviceWorker.getRegistration("./").then(reg=>reg?.update()).catch(()=>null);
   if("Notification"in window&&Notification.permission==="granted"){try{await subscribe(false);}catch{}}
   render();
   toast("רועננו הנתונים המקומיים וסנכרון ההתראות נבדק.");
@@ -312,30 +315,52 @@ function bind(){
   finally{el.enableNotifications.disabled=false;}
  });
  el.pushWarning.addEventListener("click",async()=>{try{await subscribe(true);toast("ההתראות הופעלו.");}catch{toast("לא ניתן להפעיל התראות כעת.");}render();});
- el.confirmInjection.addEventListener("click",()=>{if(!state.nextInjectionSide)return toast("יש להשלים קודם את צד ההזרקה האחרונה.");el.confirmDialogText.textContent=`האישור יתייחס למועד המתוכנן ${formatDate(state.nextDueDate)}, ${sideLabel(state.nextInjectionSide)}. ההזרקה הבאה תישאר 14 יום לאחר המועד המתוכנן הזה ובצד ההפוך.`;el.confirmDialog.showModal();});
+ el.confirmInjection.addEventListener("click",()=>{if(!state.nextInjectionSide)return toast("יש להשלים קודם את צד ההזרקה האחרונה.");el.confirmDialogText.textContent=`האישור יתייחס למועד המתוכנן ${formatDate(state.nextDueDate)}, ${sideLabel(state.nextInjectionSide)}. ההזרקה הבאה תישאר 14 יום לאחר המועד המתוכנן הזה ובצד ההפוך.`;showModal(el.confirmDialog);});
  el.dialogConfirmInjection.addEventListener("click",e=>{e.preventDefault();el.confirmDialog.close();confirmInjection();});
+ [el.settingsDrawer,el.confirmDialog,el.packageDialog,el.editTrackingDialog,el.notificationDialog].forEach(d=>d.addEventListener("close",unlockModal));
+ el.openSettings.addEventListener("click",()=>showModal(el.settingsDrawer));
+ el.closeSettings.addEventListener("click",()=>el.settingsDrawer.close());
+ el.manageNotifications.addEventListener("click",()=>{el.settingsDrawer.close();openNotificationsEditor();});
+ el.eveEnabled.addEventListener("change",()=>{el.eveTime.disabled=!el.eveEnabled.checked;});
+ el.purchaseEnabled.addEventListener("change",()=>{el.purchaseTime.disabled=!el.purchaseEnabled.checked;});
+ el.addInjectionTime.addEventListener("click",()=>{
+  if(draftPrefs.dayTimes.length>=8)return;
+  const options=Array.from({length:96},(_,i)=>String(Math.floor(i/4)).padStart(2,"0")+":"+String((i%4)*15).padStart(2,"0"));
+  draftPrefs.dayTimes.push(options.find(t=>!draftPrefs.dayTimes.includes(t)&&t>"09:45")||options.find(t=>!draftPrefs.dayTimes.includes(t))||"10:00");renderReminderTimes();
+ });
+ el.saveNotifications.addEventListener("click",saveNotificationPrefs);
+ el.editDateToggle.addEventListener("click",()=>showCalendar(el.editCalendar.classList.contains("hidden")));
+ el.calendarPrev.addEventListener("click",()=>{calendarDate=new Date(calendarDate.getFullYear(),calendarDate.getMonth()-1,1);renderCalendar();});
+ el.calendarNext.addEventListener("click",()=>{calendarDate=new Date(calendarDate.getFullYear(),calendarDate.getMonth()+1,1);renderCalendar();});
  el.orderPackage.addEventListener("click",toggleOrder);
  el.editTracking.addEventListener("click",openTrackingEditor);
  el.saveTrackingEdits.addEventListener("click",e=>{e.preventDefault();applyTrackingEdits();});
  el.refreshTracking.addEventListener("click",refreshTracking);
- el.newPackage.addEventListener("click",()=>el.packageDialog.showModal());
+ el.newPackage.addEventListener("click",()=>showModal(el.packageDialog));
  el.dialogConfirmPackage.addEventListener("click",e=>{e.preventDefault();el.packageDialog.close();purchased();});
- el.testNotification.addEventListener("click",async()=>{
-  el.testNotification.disabled=true;
-  clearPushFailure();
-  try{
-    await subscribe(true);
-    setPushStage("תזמון הודעת בדיקה ב-Cloudflare");
-    const r=await device("/test-delayed",{});
-    if(!r.ok)throw Error("not_scheduled");
-    toast("התראת בדיקה תגיע בעוד דקה. נעל את האייפון ובדוק.");
-  }catch(error){showPushFailure(error);}
-  finally{el.testNotification.disabled=false;render();}
- });
  el.resetApp.addEventListener("click",reset);
  window.addEventListener("online",async()=>{render();await flush();if("Notification" in window&&Notification.permission==="granted"){try{await subscribe(false);}catch{}}render();});
  window.addEventListener("offline",render);
  document.addEventListener("visibilitychange",()=>{if(!document.hidden)render();});
+ document.addEventListener("touchstart",e=>{
+  if(pullBusy||window.scrollY>1||document.querySelector("dialog[open]")||el.homeView.classList.contains("hidden")||e.touches.length!==1){pullStartY=null;return;}
+  pullStartY=e.touches[0].clientY;pullDistance=0;
+ },{passive:true});
+ document.addEventListener("touchmove",e=>{
+  if(pullStartY===null||e.touches.length!==1)return;
+  const dy=e.touches[0].clientY-pullStartY;
+  if(dy<=0||window.scrollY>1){pullDistance=0;el.pullIndicator.classList.remove("visible");return;}
+  pullDistance=Math.min(130,dy);
+  if(pullDistance>18){el.pullIndicator.classList.add("visible");el.pullText.textContent=pullDistance>=85?"שחרר לריענון":"משוך לריענון";}
+ },{passive:true});
+ document.addEventListener("touchend",async()=>{
+  if(pullStartY===null)return;
+  const shouldRefresh=pullDistance>=85;pullStartY=null;pullDistance=0;
+  if(!shouldRefresh){el.pullIndicator.classList.remove("visible");return;}
+  pullBusy=true;el.pullIndicator.classList.add("loading","visible");el.pullText.textContent="מסנכרן…";
+  try{await refreshTracking();}finally{pullBusy=false;el.pullIndicator.classList.remove("visible","loading");}
+ },{passive:true});
+ document.addEventListener("touchcancel",()=>{pullStartY=null;pullDistance=0;if(!pullBusy)el.pullIndicator.classList.remove("visible");},{passive:true});
 }
 async function boot(){
  bind();el.anchorDate.value=isoLocal(new Date());
