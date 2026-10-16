@@ -114,7 +114,7 @@ function renderHistory(){
  el.historyList.innerHTML=state.history.slice().reverse().map(x=>`<div class="history-item"><div><strong>${formatDate(x.scheduledDate)}</strong><br><span>${x.injectionSide?sideLabel(x.injectionSide)+" · ":""}מועד מתוכנן</span></div><span>${fmt.format(new Date(x.confirmedAt))}</span></div>`).join("");
 }
 function showModal(dialog){
- if(!document.querySelector("dialog[open]")){lockedScrollY=window.scrollY;document.body.style.top=`-${lockedScrollY}px`;document.body.classList.add("modal-locked");}
+ if(!document.body.classList.contains("modal-locked")){lockedScrollY=window.scrollY;document.body.style.top=`-${lockedScrollY}px`;document.body.classList.add("modal-locked");}
  dialog.showModal();
 }
 function unlockModal(){
@@ -183,6 +183,7 @@ async function saveNotificationPrefs(){
 }
 function render(){
  const needInstall=ios()&&!standalone();
+ el.openSettings.classList.toggle("hidden",needInstall||!state.configured);
  el.installGate.classList.toggle("hidden",!needInstall);
  el.setupView.classList.toggle("hidden",needInstall||state.configured);
  el.notificationSetup.classList.toggle("hidden",needInstall||!state.configured||state.notificationSetupSeen);
@@ -333,7 +334,7 @@ function bind(){
  el.calendarPrev.addEventListener("click",()=>{calendarDate=new Date(calendarDate.getFullYear(),calendarDate.getMonth()-1,1);renderCalendar();});
  el.calendarNext.addEventListener("click",()=>{calendarDate=new Date(calendarDate.getFullYear(),calendarDate.getMonth()+1,1);renderCalendar();});
  el.orderPackage.addEventListener("click",toggleOrder);
- el.editTracking.addEventListener("click",openTrackingEditor);
+ el.editTracking.addEventListener("click",()=>{el.settingsDrawer.close();openTrackingEditor();});
  el.saveTrackingEdits.addEventListener("click",e=>{e.preventDefault();applyTrackingEdits();});
  el.refreshTracking.addEventListener("click",refreshTracking);
  el.newPackage.addEventListener("click",()=>showModal(el.packageDialog));
