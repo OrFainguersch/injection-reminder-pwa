@@ -50,3 +50,44 @@ html{overscroll-behavior-y:contain}body.modal-locked{position:fixed;left:0;right
 .add-time-button{border:1px dashed #bdd0ed;border-radius:12px;background:#f6f9ff;color:#1768e5;padding:11px 12px;font-weight:770;margin-top:10px;width:100%}.add-time-button:disabled{opacity:.55}
 @media(max-width:380px){.app-shell{padding-inline:12px}.topbar{gap:5px}.status-pill{font-size:11px;padding:6px 8px}.menu-button{min-width:37px;min-height:37px}.due-visual{gap:4px}.due-gauge{flex-basis:108px;width:108px;height:96px}.big-date{font-size:21px}.next-side{font-size:16px}.dialog{padding:18px 14px}.drawer.dialog{padding-inline:12px}}
 @media(prefers-color-scheme:dark){.menu-button,.icon-button,.drawer-actions,.compact-select{background:#202735;color:#f3f6fb;border-color:#344057}.inline-calendar,.pref-group{background:#171d28;border-color:#344057}.pref-heading,.gauge-number{color:#f3f6fb}.gauge-needle{stroke:#e4eafa;fill:#e4eafa}.calendar-day.today:not(.selected){color:#90b9ff}.dialog-actions{background:#171d28}.add-time-button{background:#253550;border-color:#46658d;color:#a5c8ff}.remove-time{background:#322329;border-color:#64383b;color:#ffa9a9}.pull-indicator{background:#253550;color:#b9d5ff}}
+
+
+/* Clarity refresh: useful, interactive mobile cards instead of a decorative needle. */
+.drawer.dialog{left:0;right:auto;top:0;bottom:0;inset:0 auto 0 0;margin:0;width:min(85vw,370px);border-radius:0 24px 24px 0}
+.drawer.dialog[open]{animation:drawer-from-trigger .24s cubic-bezier(.2,.7,.2,1) both}
+@keyframes drawer-from-trigger{from{opacity:.45;transform:translateX(-24px)}to{opacity:1;transform:translateX(0)}}
+.due-card{padding:19px 17px 16px}.due-card .card-topline{justify-content:space-between;align-items:center}.section-kicker{font-weight:800;font-size:14px;color:#627089}
+.inline-edit-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid #dce6f5;border-radius:100px;background:#f6f9ff;color:#1768e5;font-size:12px;font-weight:800;white-space:nowrap;min-height:34px;padding:6px 12px}
+.inline-edit-button:active,.cycle-progress-button:active,.reminder-summary-button:active{transform:scale(.985)}
+.inline-edit-button:focus-visible,.cycle-progress-button:focus-visible,.reminder-summary-button:focus-visible,.stock-stepper-control:focus-visible{outline:3px solid #86aefa;outline-offset:3px}
+.next-injection-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:15px 0 17px}
+.due-details{min-width:0;flex:1}.due-details .big-date{margin:0;color:#17243b;font-weight:850;font-size:clamp(18px,5.7vw,25px);line-height:1.27;letter-spacing:0}
+.due-details .next-side{margin-top:8px;font-size:15px;font-weight:790}
+.time-remaining{border-radius:17px;padding:11px 10px;background:#edf5ff;color:#1959ae;min-width:94px;min-height:88px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:2px;flex:0 0 auto}
+.time-remaining strong{font-size:32px;line-height:1.08;font-weight:850;font-variant-numeric:tabular-nums}.time-remaining span{font-size:12px;font-weight:750}
+.time-remaining.overdue{background:#fff2e5;color:#b15a05}.time-remaining.today{background:#e9f7ec;color:#147647}
+.cycle-progress-button{background:#f7f9fd;text-align:right;width:100%;display:block;border:1px solid #edf1f7;border-radius:15px;padding:12px 13px;transition:transform .12s ease;touch-action:manipulation;color:inherit}
+.cycle-progress-labels{display:flex;justify-content:space-between;align-items:center;gap:9px;font-size:12px;font-weight:720;color:#5b6880}
+.cycle-progress-labels span:last-child{white-space:nowrap;color:#1768e5;font-weight:850;font-variant-numeric:tabular-nums}
+.cycle-track{height:9px;width:100%;border-radius:99px;background:#e4eaf3;margin:11px 0 7px;overflow:hidden;direction:rtl}
+.cycle-fill{height:100%;width:0;background:linear-gradient(270deg,#1768e5,#49a3fa);border-radius:99px;transition:width .35s ease}
+.cycle-progress-button.overdue .cycle-fill{background:#db882a}
+.cycle-progress-hint{display:flex;justify-content:flex-end;gap:5px;align-items:center;color:#7a8798;font-size:11px}
+.due-card .divider{margin:13px 0 8px}
+.reminder-summary-button{display:flex;align-items:center;gap:8px;width:100%;background:none;border:0;padding:8px 3px 1px;min-height:40px;text-align:right;transition:transform .12s ease;color:#65748a}
+.reminder-summary-button .schedule-copy{font-size:12px;text-align:right;line-height:1.5;flex:1;min-width:0;overflow-wrap:break-word;color:inherit}
+.notification-summary-icon{width:28px;height:28px;display:grid;place-items:center;flex-shrink:0;border-radius:50%;background:#e8f1ff;color:#1768e5;font-size:23px}
+.reminder-chevron{font-size:23px;color:#6a7f9a}
+.package-card{padding:17px 18px}.stock-layout{display:flex;align-items:center;justify-content:space-between;gap:10px}.stock-copy{min-width:0}.stock-quantity{display:flex;align-items:baseline;gap:8px;margin-top:8px;color:#182842}
+.stock-quantity strong{font-size:30px;line-height:1;font-weight:850;font-variant-numeric:tabular-nums}.stock-quantity span{font-size:15px;font-weight:760}
+.stock-edit-button{min-height:40px;padding:8px 12px}.package-card .package-empty{text-align:right;margin:13px 0 0;border-radius:11px;background:#fff5e8;padding:10px 12px}
+.stock-field-explanation{font-size:12px;line-height:1.45;margin:4px 0 9px;color:#778397}.stock-dialog .dialog-description{margin:0 0 20px}
+.stock-stepper{display:flex;justify-content:center;align-items:stretch;gap:9px;direction:ltr;margin:12px auto 16px}
+.stock-stepper-control{width:62px;min-height:66px;border-radius:16px;border:1px solid #ccdcee;background:#ecf4ff;color:#1768e5;font-size:27px;font-weight:650;touch-action:manipulation}
+.stock-stepper-control:disabled{opacity:.34;cursor:not-allowed}
+.stock-stepper-value{border:1px solid #e1e7f1;background:#fafcff;border-radius:17px;min-width:120px;padding:10px 12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#192b47}
+.stock-stepper-value strong{font-size:30px;font-variant-numeric:tabular-nums;line-height:1}.stock-stepper-value span{font-size:12px;color:#718095}
+.stock-dialog-help{text-align:center;margin:10px auto 6px}
+@media(max-width:360px){.due-card{padding:15px 13px}.next-injection-summary{gap:6px}.time-remaining{min-width:78px;min-height:80px}.time-remaining strong{font-size:28px}.time-remaining span{font-size:11px}.due-details .big-date{font-size:19px}.inline-edit-button{padding:6px 9px}.stock-quantity strong{font-size:26px}}
+@media(prefers-reduced-motion:reduce){.drawer.dialog[open]{animation:none}.cycle-fill,.inline-edit-button,.cycle-progress-button,.reminder-summary-button{transition:none}}
+@media(prefers-color-scheme:dark){.section-kicker,.cycle-progress-labels{color:#afbbca}.due-details .big-date,.stock-quantity,.stock-stepper-value{color:#f0f5fe}.time-remaining{background:#1f385a;color:#afd0ff}.time-remaining.today{background:#193e2f;color:#84dfad}.time-remaining.overdue{background:#45301d;color:#f0b376}.cycle-progress-button,.stock-stepper-value{background:#202735;border-color:#303a4b}.cycle-track{background:#354359}.cycle-progress-labels span:last-child{color:#9cc5ff}.inline-edit-button,.stock-stepper-control{background:#1f3858;border-color:#354c6b;color:#a6ccff}.notification-summary-icon{background:#253e65;color:#bdd4ff}.reminder-summary-button{color:#b0bcca}.stock-field-explanation{color:#aab6c7}}
