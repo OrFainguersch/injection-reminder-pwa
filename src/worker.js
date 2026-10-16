@@ -130,6 +130,18 @@ export class ReminderDevice {
       s.purchaseReminderAt=s.isDepleted&&!s.orderPending&&prefs.purchase?buyReminder(DateTime.now().toISO(),s.timeZone||"Asia/Jerusalem",prefs.purchaseTime):null;
       await this.put(s);await this.schedule();return json({ok:true,preferences:prefs});
     }
+    if(m==="POST"&&p==="/inventory"){
+      const b=await request.json().catch(()=>({})),s=await this.state();
+      if(!s.anchorDate)return json({error:"not_configured"},409);
+      if(!Number.isInteger(b.dosesRemaining)||b.dosesRemaining<0||b.dosesRemaining>40||typeof b.orderPending!=="boolean")return json({error:"invalid_inventory"},400);
+      s.isDepleted=b.dosesRemaining===0;
+      s.orderPending=b.orderPending;
+      const prefs=normalizePreferences(s.notificationPreferences),zone=s.timeZone||"Asia/Jerusalem";
+      if(!s.isDepleted||s.orderPending||!prefs.purchase)s.purchaseReminderAt=null;
+      else if(!s.purchaseReminderAt)s.purchaseReminderAt=buyReminder(DateTime.now().toISO(),zone,prefs.purchaseTime);
+      // Changing stock must never reset the injection anchor, confirmed dates or side rotation.
+      await this.put(s);await this.schedule();return json({ok:true});
+    }
     if(m==="POST"&&p==="/edit"){
       const b=await request.json().catch(()=>({})),s=await this.state();
       if(!s.anchorDate)return json({error:"not_configured"},409);

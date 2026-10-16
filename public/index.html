@@ -54,22 +54,22 @@
  <div id="offlineBanner" class="banner warning hidden">אין חיבור לאינטרנט. שינויים יסתנכרנו עם חזרת החיבור, אך התראות שכבר נשלחו לא יוכלו להתבטל בדיעבד.</div>
  <button id="pushWarning" class="banner danger hidden" type="button">ההתראות אינן פעילות. לחץ להפעלה.</button>
  <article class="card due-card">
-  <div class="card-topline"><span class="card-icon">◷</span><span id="countdown" class="countdown">—</span></div>
-  <div class="due-visual">
-    <div id="dueGauge" class="due-gauge" role="img" aria-label="ימים עד ההזרקה הבאה">
-     <svg viewBox="0 0 200 133" aria-hidden="true" focusable="false">
-      <path d="M 24 108 A 83 83 0 0 1 87 19" class="gauge-arc gauge-green"/>
-      <path d="M 92 18 A 83 83 0 0 1 175 84" class="gauge-arc gauge-amber"/>
-      <path d="M 176 89 A 83 83 0 0 1 177 108" class="gauge-arc gauge-red"/>
-      <g id="gaugeNeedle" class="gauge-needle"><line x1="100" y1="104" x2="100" y2="38"/><circle cx="100" cy="104" r="6"/></g>
-     </svg>
-     <div class="gauge-number"><strong id="gaugeDays">—</strong><span id="gaugeLabel">ימים</span></div>
-    </div>
-    <div class="centered"><div class="muted">ההזרקה הבאה</div><div id="nextDueDate" class="big-date">—</div><div id="nextInjectionSide" class="next-side">—</div></div>
-   </div>
-  <div class="divider"></div><div id="scheduleCopy" class="schedule-copy">טוען הגדרות התראות…</div>
+  <div class="card-topline"><span class="section-kicker">ההזרקה הבאה</span><button id="quickEditDate" class="inline-edit-button" type="button" aria-label="עריכת התאריך וצד ההזרקה"><span aria-hidden="true">✎</span> עריכה</button></div>
+  <div class="next-injection-summary">
+   <div class="due-details"><div id="nextDueDate" class="big-date">—</div><div id="nextInjectionSide" class="next-side">—</div></div>
+   <div class="time-remaining"><strong id="daysLeftNumber">—</strong><span id="daysLeftLabel">ימים נותרו</span></div>
+  </div>
+  <button id="cycleProgressButton" class="cycle-progress-button" type="button" aria-label="הצגת ועריכת מועד ההזרקה">
+   <div class="cycle-progress-labels"><span>התקדמות במחזור של 14 ימים</span><span id="cycleProgressText">—</span></div>
+   <div class="cycle-track"><div id="cycleFill" class="cycle-fill"></div></div>
+   <span class="cycle-progress-hint">לחץ לשינוי מועד ההזרקה <span aria-hidden="true">‹</span></span>
+  </button>
+  <div class="divider"></div><button id="quickNotifications" class="reminder-summary-button" type="button" aria-label="פתיחת עריכת התראות"><span class="notification-summary-icon" aria-hidden="true">♢</span><span id="scheduleCopy" class="schedule-copy">טוען התראות…</span><span class="reminder-chevron" aria-hidden="true">‹</span></button>
  </article>
- <article class="card package-card"><div class="row between"><strong>החבילה הנוכחית</strong><span id="doseText">2 מתוך 2</span></div><div id="doseDots" class="dose-dots"></div><div id="packageEmpty" class="package-empty hidden">החבילה הסתיימה — יש לרכוש חדשה</div></article>
+ <article class="card package-card">
+  <div class="stock-layout"><div class="stock-copy"><div class="section-kicker">המלאי שלך</div><div class="stock-quantity"><strong id="doseNumber">—</strong><span id="doseText">זריקות נותרו</span></div></div><button id="quickStockEdit" class="inline-edit-button stock-edit-button" type="button" aria-label="עדכון מלאי הזריקות"><span aria-hidden="true">✎</span> עדכן מלאי</button></div>
+  <div id="packageEmpty" class="package-empty hidden">המלאי הסתיים — יש לרכוש חבילה</div>
+ </article>
  <button id="confirmInjection" class="primary-button confirm-button" type="button">✓ &nbsp; הזרקתי</button>
  <div id="confirmHint" class="hint hidden">ניתן לאשר החל מיום ההזרקה המתוכנן.</div>
  <div class="package-actions">
@@ -81,7 +81,7 @@
 </section>
 </main><div id="toast" class="toast hidden" role="status"></div>
 </div>
-<dialog id="settingsDrawer" class="drawer dialog" aria-labelledby="drawerHeading"><div class="drawer-head"><h3 id="drawerHeading">הגדרות</h3><button id="closeSettings" type="button" class="icon-button" aria-label="סגור תפריט">✕</button></div><p class="drawer-subtitle">העדפות וניהול האפליקציה</p><div class="drawer-actions"><button id="manageNotifications" class="settings-row" type="button"><span>🔔 &nbsp;עריכת התראות ותזמון</span><span>‹</span></button><button id="editTracking" class="settings-row" type="button"><span>◷ &nbsp;עריכת מועד, ירך ומלאי</span><span>‹</span></button><button id="refreshTracking" class="settings-row" type="button"><span>↻ &nbsp;רענון וסנכרון</span><span>‹</span></button><div id="pushDiagnostics" class="push-diagnostics hidden" role="status" aria-live="polite"></div><button id="resetApp" class="settings-row destructive" type="button"><span>איפוס כל הנתונים</span><span>‹</span></button></div></dialog>
+<dialog id="settingsDrawer" class="drawer dialog" aria-labelledby="drawerHeading"><div class="drawer-head"><h3 id="drawerHeading">הגדרות</h3><button id="closeSettings" type="button" class="icon-button" aria-label="סגור תפריט">✕</button></div><p class="drawer-subtitle">העדפות וניהול האפליקציה</p><div class="drawer-actions"><button id="manageNotifications" class="settings-row" type="button"><span>🔔 &nbsp;עריכת התראות ותזמון</span><span>‹</span></button><button id="editTracking" class="settings-row" type="button"><span>◷ &nbsp;עריכת מועד, ירך ומלאי</span><span>‹</span></button><div id="pushDiagnostics" class="push-diagnostics hidden" role="status" aria-live="polite"></div><button id="resetApp" class="settings-row destructive" type="button"><span>איפוס כל הנתונים</span><span>‹</span></button></div></dialog>
 <dialog id="confirmDialog" class="dialog"><form method="dialog"><h3>לאשר שהזרקת?</h3><p id="confirmDialogText"></p><div class="dialog-actions"><button value="cancel" class="secondary-button">ביטול</button><button id="dialogConfirmInjection" class="primary-button" value="default">כן, הזרקתי</button></div></form></dialog>
 <dialog id="packageDialog" class="dialog"><form method="dialog"><h3>קיבלתי חבילה חדשה</h3><p>שתי זריקות יתווספו למלאי הקיים. הזמנה פתוחה תסומן כהתקבלה, והתראת רכישה ממתינה תבוטל.</p><div class="dialog-actions"><button value="cancel" class="secondary-button">ביטול</button><button id="dialogConfirmPackage" class="primary-button" value="default">אישור</button></div></form></dialog>
 <dialog id="editTrackingDialog" class="dialog"><form method="dialog">
@@ -93,10 +93,18 @@
  <div id="editCalendar" class="inline-calendar hidden" aria-label="בחירת תאריך"><div class="calendar-heading"><button id="calendarPrev" class="icon-button" type="button" aria-label="חודש קודם">‹</button><strong id="calendarMonth"></strong><button id="calendarNext" class="icon-button" type="button" aria-label="חודש הבא">›</button></div><div class="calendar-weekdays" aria-hidden="true"><span>א</span><span>ב</span><span>ג</span><span>ד</span><span>ה</span><span>ו</span><span>ש</span></div><div id="calendarGrid" class="calendar-grid"></div></div>
  <label class="field-label" for="editNextSide">הירך להזרקה הבאה</label>
  <select id="editNextSide" class="date-input"><option value="right">ירך ימין</option><option value="left">ירך שמאל</option></select>
- <label class="field-label" for="editStock">מספר זריקות זמינות (בכל חבילה 2)</label>
+ <label class="field-label" for="editStock">כמה זריקות נשארו אצלך כרגע?</label>
+ <p class="stock-field-explanation">המספר הוא מה שנשאר בפועל בכל החבילות יחד. לדוגמה, אם נשארה זריקה אחת — מזינים 1.</p>
  <input id="editStock" class="date-input" type="number" min="0" max="40" step="1" required>
  <label class="edit-toggle"><input id="editOrderPending" type="checkbox"> חבילה נוספת כבר הוזמנה וממתינה להגעה</label>
  <div class="dialog-actions"><button value="cancel" class="secondary-button">ביטול</button><button id="saveTrackingEdits" value="default" class="primary-button">שמור שינויים</button></div>
+ </form></dialog>
+<dialog id="stockDialog" class="dialog stock-dialog" aria-labelledby="stockDialogTitle"><form method="dialog">
+ <h3 id="stockDialogTitle">עדכון מלאי הזריקות</h3>
+ <p class="dialog-description">כמה זריקות נשארו לך כרגע בסך הכול?</p>
+ <div class="stock-stepper" role="group" aria-label="מספר זריקות שנותרו"><button id="stockDecrement" class="stock-stepper-control" type="button" aria-label="הפחת זריקה">−</button><div class="stock-stepper-value"><strong id="stockDraftNumber" aria-live="polite">0</strong><span id="stockDraftLabel">זריקות נותרו</span></div><button id="stockIncrement" class="stock-stepper-control" type="button" aria-label="הוסף זריקה">＋</button></div>
+ <p class="stock-field-explanation stock-dialog-help">זריקה אחת שנותרה = 1. חבילה מלאה חדשה = 2. העדכון לא משנה את מועד ההזרקה.</p>
+ <div class="dialog-actions"><button value="cancel" class="secondary-button">ביטול</button><button id="saveStock" type="button" class="primary-button">שמור מלאי</button></div>
  </form></dialog>
 <dialog id="notificationDialog" class="dialog prefs-dialog" aria-labelledby="prefsTitle"><form method="dialog">
  <h3 id="prefsTitle">עריכת התראות</h3>

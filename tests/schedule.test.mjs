@@ -177,3 +177,48 @@ test("purchase reminder time obeys the user's preferences",async()=>{
  assert.equal(response.status,200);
  assert.equal(db.get("state").purchaseReminderAt,DateTime.fromISO("2026-10-18T13:45:00",{zone}).toUTC().toISO());
 });
+
+
+test("inventory edit preserves the date cycle, sides and previously confirmed injections",async()=>{
+ const initial={...base("2026-10-01"),confirmedDueDates:["2026-10-15"],isDepleted:false,subscription:null};
+ const {device,db}=fakeState(initial);
+ const response=await device.fetch(new Request("https://internal/inventory",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({dosesRemaining:1,orderPending:false})}));
+ assert.equal(response.status,200);
+ const saved=db.get("state");
+ assert.equal(saved.anchorDate,"2026-10-01");
+ assert.equal(saved.anchorSide,"right");
+ assert.deepEqual(saved.confirmedDueDates,["2026-10-15"]);
+ assert.equal(saved.isDepleted,false);
+ const next=device.nextEvent(saved,stamp("2026-10-28",19));
+ assert.equal(next.dueDate,"2026-10-29");
+ assert.equal(next.side,"right");
+});
+test("running out of inventory sets the purchase reminder without clearing injection history",async()=>{
+ const initial={...base("2026-10-01"),confirmedDueDates:["2026-10-15"],isDepleted:false,subscription:null};
+ const {device,db}=fakeState(initial);
+ const response=await device.fetch(new Request("https://internal/inventory",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({dosesRemaining:0,orderPending:false})}));
+ assert.equal(response.status,200);
+ const saved=db.get("state");
+ assert.equal(saved.isDepleted,true);
+ assert.ok(saved.purchaseReminderAt);
+ assert.deepEqual(saved.confirmedDueDates,["2026-10-15"]);
+});
+test("an ordered package or newly available doses cancel the purchase alert",async()=>{
+ const initial={...base("2026-10-01"),isDepleted:true,purchaseReminderAt:"2026-10-20T07:00:00.000Z",subscription:null};
+ const {device,db}=fakeState(initial);
+ const req=n=>new Request("https://internal/inventory",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({dosesRemaining:n,orderPending:false})});
+ assert.equal((await device.fetch(req(2))).status,200);
+ assert.equal(db.get("state").purchaseReminderAt,null);
+ assert.equal((await device.fetch(req(0))).status,200);
+ assert.ok(db.get("state").purchaseReminderAt);
+ const ordered=new Request("https://internal/inventory",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({dosesRemaining:0,orderPending:true})});
+ assert.equal((await device.fetch(ordered)).status,200);
+ assert.equal(db.get("state").purchaseReminderAt,null);
+});
+test("invalid stock counts are rejected safely",async()=>{
+ const initial={...base("2026-10-01"),isDepleted:false,subscription:null};
+ const {device,db}=fakeState(initial);
+ const response=await device.fetch(new Request("https://internal/inventory",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({dosesRemaining:-1,orderPending:false})}));
+ assert.equal(response.status,400);
+ assert.equal(db.get("state").isDepleted,false);
+});
