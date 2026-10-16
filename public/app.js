@@ -1,11 +1,14 @@
 const STATE_KEY="injectionReminder.state.v2",QUEUE_KEY="injectionReminder.queue.v2";
 const RAW_API_BASE_URL=String(window.INJECTION_REMINDER_CONFIG?.apiBaseUrl||"");
 const API_BASE_URL=RAW_API_BASE_URL.endsWith("/")?RAW_API_BASE_URL.slice(0,-1):RAW_API_BASE_URL;
-const ids=["installGate","setupView","notificationSetup","homeView","statusPill","recheckInstall","anchorDate","saveSetup","enableNotifications","skipNotifications","countdown","nextDueDate","nextInjectionSide","doseText","doseDots","packageEmpty","confirmInjection","confirmHint","newPackage","historyList","testNotification","resetApp","offlineBanner","pushWarning","toast","confirmDialog","confirmDialogText","dialogConfirmInjection","packageDialog","dialogConfirmPackage","missingSidePanel","saveMissingSide","pushDiagnostics","orderPackage","editTracking","refreshTracking","editTrackingDialog","editNextDue","editNextSide","editStock","editOrderPending","saveTrackingEdits"];
+const ids=["installGate","setupView","notificationSetup","homeView","statusPill","recheckInstall","anchorDate","saveSetup","enableNotifications","skipNotifications","countdown","nextDueDate","nextInjectionSide","doseText","doseDots","packageEmpty","confirmInjection","confirmHint","newPackage","historyList","resetApp","offlineBanner","pushWarning","toast","confirmDialog","confirmDialogText","dialogConfirmInjection","packageDialog","dialogConfirmPackage","missingSidePanel","saveMissingSide","pushDiagnostics","orderPackage","editTracking","refreshTracking","editTrackingDialog","editNextDue","editNextSide","editStock","editOrderPending","saveTrackingEdits","openSettings","closeSettings","settingsDrawer","manageNotifications","notificationDialog","saveNotifications","eveEnabled","eveTime","injectionTimes","addInjectionTime","purchaseEnabled","purchaseTime","scheduleCopy","pullIndicator","pullText","dueGauge","gaugeDays","gaugeLabel","gaugeNeedle","editDateToggle","editDateText","editCalendar","calendarPrev","calendarNext","calendarMonth","calendarGrid"];
 const el=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));
-const defaults=()=>({configured:false,anchorDate:"",nextDueDate:"",lastInjectionSide:null,nextInjectionSide:null,dosesRemaining:2,orderPending:false,history:[],deviceId:crypto.randomUUID(),notificationSetupSeen:false,pushSynced:false});
-function load(){try{return {...defaults(),...(JSON.parse(localStorage.getItem(STATE_KEY))||{})};}catch{return defaults();}}
-let state=load(),selectedDose=2,selectedSide=null,toastTimer;
+const defaultPrefs=()=>({eve:true,eveTime:"20:00",dayTimes:["10:00","14:00","18:00","22:00"],purchase:true,purchaseTime:"10:00"});
+const validTime=t=>typeof t==="string"&&/^([01][0-9]|2[0-3]):(00|15|30|45)$/.test(t);
+const normalizePrefs=v=>({eve:typeof v?.eve==="boolean"?v.eve:true,eveTime:validTime(v?.eveTime)?v.eveTime:"20:00",dayTimes:Array.isArray(v?.dayTimes)?[...new Set(v.dayTimes.filter(validTime))].sort().slice(0,8):defaultPrefs().dayTimes,purchase:typeof v?.purchase==="boolean"?v.purchase:true,purchaseTime:validTime(v?.purchaseTime)?v.purchaseTime:"10:00"});
+const defaults=()=>({notificationPrefs:defaultPrefs(),configured:false,anchorDate:"",nextDueDate:"",lastInjectionSide:null,nextInjectionSide:null,dosesRemaining:2,orderPending:false,history:[],deviceId:crypto.randomUUID(),notificationSetupSeen:false,pushSynced:false});
+function load(){try{const data=JSON.parse(localStorage.getItem(STATE_KEY))||{};return {...defaults(),...data,notificationPrefs:normalizePrefs(data.notificationPrefs)};}catch{return defaults();}}
+let state=load(),selectedDose=2,selectedSide=null,toastTimer,draftPrefs=null,calendarDate=new Date(),lockedScrollY=0,pullStartY=null,pullDistance=0,pullBusy=false;
 const save=()=>localStorage.setItem(STATE_KEY,JSON.stringify(state));
 const isoLocal=d=>[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
 const parseDate=s=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d,12);};
@@ -110,6 +113,74 @@ function renderHistory(){
  const fmt=new Intl.DateTimeFormat("he-IL",{dateStyle:"medium",timeStyle:"short"});
  el.historyList.innerHTML=state.history.slice().reverse().map(x=>`<div class="history-item"><div><strong>${formatDate(x.scheduledDate)}</strong><br><span>${x.injectionSide?sideLabel(x.injectionSide)+" · ":""}מועד מתוכנן</span></div><span>${fmt.format(new Date(x.confirmedAt))}</span></div>`).join("");
 }
+function showModal(dialog){
+ if(!document.querySelector("dialog[open]")){lockedScrollY=window.scrollY;document.body.style.top=`-${lockedScrollY}px`;document.body.classList.add("modal-locked");}
+ dialog.showModal();
+}
+function unlockModal(){
+ if(document.querySelector("dialog[open]"))return;
+ document.body.classList.remove("modal-locked");document.body.style.top="";
+ window.scrollTo(0,lockedScrollY);
+}
+function showCalendar(open){
+ el.editCalendar.classList.toggle("hidden",!open);
+ el.editDateToggle.setAttribute("aria-expanded",String(open));
+ if(open)renderCalendar();
+}
+function renderCalendar(){
+ const year=calendarDate.getFullYear(),month=calendarDate.getMonth();
+ el.calendarMonth.textContent=new Intl.DateTimeFormat("he-IL",{month:"long",year:"numeric"}).format(calendarDate);
+ el.calendarGrid.replaceChildren();
+ const first=new Date(year,month,1).getDay();
+ for(let i=0;i<first;i++){const blank=document.createElement("span");blank.className="calendar-blank";el.calendarGrid.appendChild(blank);}
+ const days=new Date(year,month+1,0).getDate();
+ for(let day=1;day<=days;day++){
+  const date=isoLocal(new Date(year,month,day));
+  const b=document.createElement("button");b.type="button";b.className="calendar-day"+(date===el.editNextDue.value?" selected":"")+(date===isoLocal(new Date())?" today":"");
+  b.textContent=String(day);b.setAttribute("aria-label",formatDate(date));b.setAttribute("aria-pressed",String(date===el.editNextDue.value));
+  b.addEventListener("click",()=>{el.editNextDue.value=date;el.editDateText.textContent=formatDate(date);showCalendar(false);});
+  el.calendarGrid.appendChild(b);
+ }
+}
+function timeSelect(select){
+ if(select.options.length)return;
+ for(let hour=0;hour<24;hour++)for(let minute=0;minute<60;minute+=15){
+  const value=String(hour).padStart(2,"0")+":"+String(minute).padStart(2,"0");
+  const option=document.createElement("option");option.value=value;option.textContent=value;select.appendChild(option);
+ }
+}
+function renderReminderTimes(){
+ el.injectionTimes.replaceChildren();
+ draftPrefs.dayTimes.forEach((time,index)=>{
+  const row=document.createElement("div");row.className="reminder-time-row";
+  const sel=document.createElement("select");sel.className="compact-select";sel.setAttribute("aria-label","שעת תזכורת "+(index+1));timeSelect(sel);sel.value=time;
+  sel.addEventListener("change",()=>{draftPrefs.dayTimes[index]=sel.value;});
+  const del=document.createElement("button");del.type="button";del.className="remove-time";del.textContent="✕";del.setAttribute("aria-label","הסר תזכורת בשעה "+time);
+  del.addEventListener("click",()=>{draftPrefs.dayTimes.splice(index,1);renderReminderTimes();});
+  row.append(sel,del);el.injectionTimes.appendChild(row);
+ });
+ el.addInjectionTime.disabled=draftPrefs.dayTimes.length>=8;
+ if(draftPrefs.dayTimes.length===0){const p=document.createElement("div");p.className="pref-hint";p.textContent="אין תזכורות ביום ההזרקה.";el.injectionTimes.appendChild(p);}
+}
+function openNotificationsEditor(){
+ draftPrefs=normalizePrefs(state.notificationPrefs);
+ el.eveEnabled.checked=draftPrefs.eve;el.purchaseEnabled.checked=draftPrefs.purchase;
+ timeSelect(el.eveTime);timeSelect(el.purchaseTime);
+ el.eveTime.value=draftPrefs.eveTime;el.purchaseTime.value=draftPrefs.purchaseTime;
+ el.eveTime.disabled=!draftPrefs.eve;el.purchaseTime.disabled=!draftPrefs.purchase;
+ renderReminderTimes();showModal(el.notificationDialog);
+}
+async function saveNotificationPrefs(){
+ const newPrefs=normalizePrefs({...draftPrefs,eve:el.eveEnabled.checked,eveTime:el.eveTime.value,purchase:el.purchaseEnabled.checked,purchaseTime:el.purchaseTime.value});
+ if(!navigator.onLine)return toast("שינוי התראות דורש חיבור לשרת. נסה שוב כשיש אינטרנט.");
+ el.saveNotifications.disabled=true;
+ try{
+  await device("/notifications",{preferences:newPrefs});
+  state.notificationPrefs=newPrefs;save();render();el.notificationDialog.close();
+  toast("הגדרות ההתראות נשמרו ותוזמנו מחדש בשרת.");
+ }catch{toast("שמירת ההתראות נכשלה; ההגדרות הקודמות נשמרו.");}
+ finally{el.saveNotifications.disabled=false;}
+}
 function render(){
  const needInstall=ios()&&!standalone();
  el.installGate.classList.toggle("hidden",!needInstall);
@@ -119,7 +190,18 @@ function render(){
  el.offlineBanner.classList.toggle("hidden",navigator.onLine);
  el.missingSidePanel.classList.toggle("hidden",!state.configured||!!state.nextInjectionSide);
  if(state.configured){
-  el.nextDueDate.textContent=formatDate(state.nextDueDate);
+  const remaining=daysUntil(state.nextDueDate);
+   el.gaugeDays.textContent=String(Math.abs(remaining));
+   el.gaugeLabel.textContent=remaining<0?"ימי איחור":remaining===1?"יום":"ימים";
+   el.dueGauge.setAttribute("aria-label",remaining<0?`איחור של ${-remaining} ימים בהזרקה`:`${remaining} ימים עד ההזרקה`);
+   const progress=Math.max(0,Math.min(1,(14-remaining)/14));
+   el.gaugeNeedle.style.transform=`rotate(${-118+progress*236}deg)`;
+   const prefs=normalizePrefs(state.notificationPrefs),copies=[];
+   if(prefs.eve)copies.push(`ערב קודם: ${prefs.eveTime}`);
+   if(prefs.dayTimes.length)copies.push(`ביום ההזרקה: ${prefs.dayTimes.join(" · ")}`);
+   if(prefs.purchase)copies.push(`תזכורת לחבילה: ${prefs.purchaseTime}`);
+   el.scheduleCopy.textContent=copies.length?copies.join("  |  "):"כל ההתראות כבויות (ניתן לשנות בהגדרות)";
+   el.nextDueDate.textContent=formatDate(state.nextDueDate);
   el.nextInjectionSide.textContent=sideLabel(state.nextInjectionSide);
   el.countdown.textContent=countdown(state.nextDueDate);
   el.countdown.classList.toggle("overdue",daysUntil(state.nextDueDate)<=0);
