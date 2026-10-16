@@ -3,18 +3,21 @@ import { generateVapidKeys } from "@mmmike/web-push/vapid";
 import { sendPushNotification } from "@mmmike/web-push/send";
 
 const json = (value, status=200) => new Response(JSON.stringify(value), {status,headers:{"content-type":"application/json;charset=utf-8","cache-control":"no-store"}});
-const HOURS=[10,14,18,22];
+const defaultPreferences=()=>({eve:true,eveTime:"20:00",dayTimes:["10:00","14:00","18:00","22:00"],purchase:true,purchaseTime:"10:00"});
+const validTime=t=>typeof t==="string"&&/^([01][0-9]|2[0-3]):(00|15|30|45)$/.test(t);
+const normalizePreferences=v=>({eve:typeof v?.eve==="boolean"?v.eve:true,eveTime:validTime(v?.eveTime)?v.eveTime:"20:00",dayTimes:Array.isArray(v?.dayTimes)?[...new Set(v.dayTimes.filter(validTime))].sort().slice(0,8):defaultPreferences().dayTimes,purchase:typeof v?.purchase==="boolean"?v.purchase:true,purchaseTime:validTime(v?.purchaseTime)?v.purchaseTime:"10:00"});
+const validPreferences=v=>!!v&&typeof v==="object"&&typeof v.eve==="boolean"&&validTime(v.eveTime)&&Array.isArray(v.dayTimes)&&v.dayTimes.length<=8&&v.dayTimes.every(validTime)&&typeof v.purchase==="boolean"&&validTime(v.purchaseTime);
 const DEFAULT_FRONTEND_ORIGIN="https://orfainguersch.github.io";
 const corsOrigin=(request,env)=>{const origin=String(request.headers.get("origin")||"");const configured=String(env.FRONTEND_ORIGIN||DEFAULT_FRONTEND_ORIGIN).trim();return origin&&origin===configured?origin:"";};
 const cors=(response,request,env)=>{const headers=new Headers(response.headers);const origin=corsOrigin(request,env);if(origin){headers.set("access-control-allow-origin",origin);headers.set("vary","Origin");}headers.set("access-control-allow-methods","GET,POST,DELETE,OPTIONS");headers.set("access-control-allow-headers","content-type");return new Response(response.body,{status:response.status,statusText:response.statusText,headers});};
 const deviceIdOK=s=>typeof s==="string" && /^[a-f0-9-]{32,64}$/i.test(s);
 const safeSubscription=s=>{try{const u=new URL(s?.endpoint||"");return u.protocol==="https:"&&(u.hostname==="push.apple.com"||u.hostname.endsWith(".push.apple.com")) && !!s?.keys?.auth && !!s?.keys?.p256dh;}catch{return false;}};
-const defaultState=()=>({subscription:null,anchorDate:null,anchorSide:null,timeZone:"Asia/Jerusalem",confirmedDueDates:[],purchaseReminderAt:null,testReminderAt:null,orderPending:false,isDepleted:false});
+const defaultState=()=>({subscription:null,anchorDate:null,anchorSide:null,timeZone:"Asia/Jerusalem",confirmedDueDates:[],purchaseReminderAt:null,testReminderAt:null,orderPending:false,isDepleted:false,notificationPreferences:defaultPreferences()});
 const dueFor=(anchor,cycle,zone)=>DateTime.fromISO(anchor,{zone}).startOf("day").plus({days:14*(cycle+1)});
 const validSide=side=>side==="right"||side==="left";
 const sideForCycle=(anchorSide,cycle)=>!validSide(anchorSide)?null:(cycle%2===0?(anchorSide==="right"?"left":"right"):anchorSide);
 const sideHe=side=>side==="right"?"ירך ימין":side==="left"?"ירך שמאל":"";
-const buyReminder=(iso,zone)=>{let d=DateTime.fromISO(iso,{zone}).startOf("day").plus({days:1}).set({hour:10});if(d.weekday===6)d=d.plus({days:1});return d.toUTC().toISO();};
+const buyReminder=(iso,zone,time="10:00")=>{const [hour,minute]=time.split(":").map(Number);let d=DateTime.fromISO(iso,{zone}).startOf("day").plus({days:1}).set({hour,minute});if(d.weekday===6)d=d.plus({days:1});return d.toUTC().toISO();};
 
 export class PushConfig {
   constructor(ctx,env){this.ctx=ctx;this.env=env;}
@@ -50,7 +53,8 @@ export class ReminderDevice {
   nextEvent(state,after=Date.now()){
     const events=[];
     if(state.testReminderAt){const ms=Date.parse(state.testReminderAt);if(ms>after)events.push({kind:"test",at:ms});}
-    if(state.purchaseReminderAt){const ms=Date.parse(state.purchaseReminderAt);if(ms>after)events.push({kind:"purchase",at:ms});}
+    const prefs=normalizePreferences(state.notificationPreferences);
+    if(prefs.purchase&&state.purchaseReminderAt){const ms=Date.parse(state.purchaseReminderAt);if(ms>after)events.push({kind:"purchase",at:ms});}
     if(state.anchorDate){
       const zone=state.timeZone||"Asia/Jerusalem";
       const today=DateTime.fromMillis(after,{zone}).startOf("day");
@@ -61,11 +65,13 @@ export class ReminderDevice {
       for(let cycle=start;cycle<start+8;cycle++){
         const due=dueFor(state.anchorDate,cycle,zone),key=due.toISODate();
         if(confirmed.has(key))continue;
-        const eve=due.minus({days:1}).set({hour:20,minute:0,second:0,millisecond:0}).toMillis();
+        const [eveHour,eveMinute]=prefs.eveTime.split(":").map(Number);
+        const eve=due.minus({days:1}).set({hour:eveHour,minute:eveMinute,second:0,millisecond:0}).toMillis();
         const side=sideForCycle(state.anchorSide,cycle);
-        if(eve>after)events.push({kind:"eve",at:eve,dueDate:key,side});
-        for(const hour of HOURS){
-          const at=due.set({hour,minute:0,second:0,millisecond:0}).toMillis();
+        if(prefs.eve&&eve>after)events.push({kind:"eve",at:eve,dueDate:key,side});
+        for(const time of prefs.dayTimes){
+          const [hour,minute]=time.split(":").map(Number);
+          const at=due.set({hour,minute,second:0,millisecond:0}).toMillis();
           if(at>after)events.push({kind:"injection",at,dueDate:key,side});
         }
       }
@@ -112,6 +118,18 @@ export class ReminderDevice {
       const b=await request.json().catch(()=>({}));if(!validSide(b.lastInjectionSide))return json({error:"invalid_side"},400);
       const s=await this.state();if(!s.anchorDate)return json({error:"not_configured"},409);s.anchorSide=b.lastInjectionSide;await this.put(s);await this.schedule();return json({ok:true});
     }
+    if(m==="GET"&&p==="/notifications"){
+      const s=await this.state();return json({preferences:normalizePreferences(s.notificationPreferences)});
+    }
+    if(m==="POST"&&p==="/notifications"){
+      const b=await request.json().catch(()=>({})),s=await this.state();
+      if(!s.anchorDate)return json({error:"not_configured"},409);
+      if(!validPreferences(b.preferences))return json({error:"invalid_preferences"},400);
+      s.notificationPreferences=normalizePreferences(b.preferences);
+      const prefs=s.notificationPreferences;
+      s.purchaseReminderAt=s.isDepleted&&!s.orderPending&&prefs.purchase?buyReminder(DateTime.now().toISO(),s.timeZone||"Asia/Jerusalem",prefs.purchaseTime):null;
+      await this.put(s);await this.schedule();return json({ok:true,preferences:prefs});
+    }
     if(m==="POST"&&p==="/edit"){
       const b=await request.json().catch(()=>({})),s=await this.state();
       if(!s.anchorDate)return json({error:"not_configured"},409);
@@ -125,7 +143,8 @@ export class ReminderDevice {
       // Editing deliberately reanchors the next occurrence; old confirmed reminders cannot suppress it.
       s.anchorDate=next.minus({days:14}).toISODate();s.anchorSide=b.nextSide==="right"?"left":"right";s.confirmedDueDates=[];
       s.orderPending=b.orderPending;s.isDepleted=b.dosesRemaining===0;
-      s.purchaseReminderAt=s.isDepleted&&!s.orderPending?buyReminder(DateTime.now().toISO(),zone):null;
+      const prefs=normalizePreferences(s.notificationPreferences);
+      s.purchaseReminderAt=s.isDepleted&&!s.orderPending&&prefs.purchase?buyReminder(DateTime.now().toISO(),zone,prefs.purchaseTime):null;
       await this.put(s);await this.schedule();return json({ok:true,changed});
     }
     if(m==="POST"&&p==="/ordered"){
@@ -134,7 +153,8 @@ export class ReminderDevice {
     }
     if(m==="POST"&&p==="/cancel-order"){
       const s=await this.state();s.orderPending=false;
-      if(s.isDepleted)s.purchaseReminderAt=buyReminder(DateTime.now().toISO(),s.timeZone||"Asia/Jerusalem");
+      const prefs=normalizePreferences(s.notificationPreferences);
+      if(s.isDepleted&&prefs.purchase)s.purchaseReminderAt=buyReminder(DateTime.now().toISO(),s.timeZone||"Asia/Jerusalem",prefs.purchaseTime);
       await this.put(s);await this.schedule();return json({ok:true});
     }
     if(m==="POST"&&p==="/confirm"){
@@ -143,9 +163,10 @@ export class ReminderDevice {
       if(typeof b.dueDate!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(b.dueDate))return json({error:"invalid_due"},400);
       s.confirmedDueDates=[...new Set([...(s.confirmedDueDates||[]),b.dueDate])].slice(-80);
        s.isDepleted=b.packageDepleted===true;
-      if(s.isDepleted&&!s.orderPending){
+      if(s.isDepleted&&!s.orderPending&&normalizePreferences(s.notificationPreferences).purchase){
         const stamp=typeof b.confirmedAt==="string"&&DateTime.fromISO(b.confirmedAt).isValid?b.confirmedAt:DateTime.now().toISO();
-        s.purchaseReminderAt=buyReminder(stamp,s.timeZone||"Asia/Jerusalem");
+        const prefs=normalizePreferences(s.notificationPreferences);
+        s.purchaseReminderAt=buyReminder(stamp,s.timeZone||"Asia/Jerusalem",prefs.purchaseTime);
       }else{s.purchaseReminderAt=null;}
       await this.put(s);await this.schedule();return json({ok:true});
     }
