@@ -1,14 +1,14 @@
 const STATE_KEY="injectionReminder.state.v2",QUEUE_KEY="injectionReminder.queue.v2";
 const RAW_API_BASE_URL=String(window.INJECTION_REMINDER_CONFIG?.apiBaseUrl||"");
 const API_BASE_URL=RAW_API_BASE_URL.endsWith("/")?RAW_API_BASE_URL.slice(0,-1):RAW_API_BASE_URL;
-const ids=["installGate","setupView","notificationSetup","homeView","statusPill","recheckInstall","anchorDate","saveSetup","enableNotifications","skipNotifications","countdown","nextDueDate","nextInjectionSide","doseText","doseDots","packageEmpty","confirmInjection","confirmHint","newPackage","historyList","resetApp","offlineBanner","pushWarning","toast","confirmDialog","confirmDialogText","dialogConfirmInjection","packageDialog","dialogConfirmPackage","missingSidePanel","saveMissingSide","pushDiagnostics","orderPackage","editTracking","refreshTracking","editTrackingDialog","editNextDue","editNextSide","editStock","editOrderPending","saveTrackingEdits","openSettings","closeSettings","settingsDrawer","manageNotifications","notificationDialog","saveNotifications","eveEnabled","eveTime","injectionTimes","addInjectionTime","purchaseEnabled","purchaseTime","scheduleCopy","pullIndicator","pullText","dueGauge","gaugeDays","gaugeLabel","gaugeNeedle","editDateToggle","editDateText","editCalendar","calendarPrev","calendarNext","calendarMonth","calendarGrid"];
+const ids=["installGate","setupView","notificationSetup","homeView","statusPill","recheckInstall","anchorDate","saveSetup","enableNotifications","skipNotifications","nextDueDate","nextInjectionSide","doseText","doseNumber","packageEmpty","confirmInjection","confirmHint","newPackage","historyList","resetApp","offlineBanner","pushWarning","toast","confirmDialog","confirmDialogText","dialogConfirmInjection","packageDialog","dialogConfirmPackage","missingSidePanel","saveMissingSide","pushDiagnostics","orderPackage","editTracking","editTrackingDialog","editNextDue","editNextSide","editStock","editOrderPending","saveTrackingEdits","openSettings","closeSettings","settingsDrawer","manageNotifications","notificationDialog","saveNotifications","eveEnabled","eveTime","injectionTimes","addInjectionTime","purchaseEnabled","purchaseTime","scheduleCopy","pullIndicator","pullText","daysLeftNumber","daysLeftLabel","cycleProgressText","cycleFill","cycleProgressButton","quickEditDate","quickStockEdit","quickNotifications","stockDialog","stockDecrement","stockIncrement","stockDraftNumber","stockDraftLabel","saveStock","editDateToggle","editDateText","editCalendar","calendarPrev","calendarNext","calendarMonth","calendarGrid"];
 const el=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));
 const defaultPrefs=()=>({eve:true,eveTime:"20:00",dayTimes:["10:00","14:00","18:00","22:00"],purchase:true,purchaseTime:"10:00"});
 const validTime=t=>typeof t==="string"&&/^([01][0-9]|2[0-3]):(00|15|30|45)$/.test(t);
 const normalizePrefs=v=>({eve:typeof v?.eve==="boolean"?v.eve:true,eveTime:validTime(v?.eveTime)?v.eveTime:"20:00",dayTimes:Array.isArray(v?.dayTimes)?[...new Set(v.dayTimes.filter(validTime))].sort().slice(0,8):defaultPrefs().dayTimes,purchase:typeof v?.purchase==="boolean"?v.purchase:true,purchaseTime:validTime(v?.purchaseTime)?v.purchaseTime:"10:00"});
 const defaults=()=>({notificationPrefs:defaultPrefs(),configured:false,anchorDate:"",nextDueDate:"",lastInjectionSide:null,nextInjectionSide:null,dosesRemaining:2,orderPending:false,history:[],deviceId:crypto.randomUUID(),notificationSetupSeen:false,pushSynced:false});
 function load(){try{const data=JSON.parse(localStorage.getItem(STATE_KEY))||{};return {...defaults(),...data,notificationPrefs:normalizePrefs(data.notificationPrefs)};}catch{return defaults();}}
-let state=load(),selectedDose=2,selectedSide=null,toastTimer,draftPrefs=null,calendarDate=new Date(),lockedScrollY=0,pullStartY=null,pullDistance=0,pullBusy=false;
+let state=load(),selectedDose=2,selectedSide=null,toastTimer,draftPrefs=null,calendarDate=new Date(),lockedScrollY=0,pullStartY=null,pullDistance=0,pullBusy=false,refreshBusy=false,stockDraft=0;
 const save=()=>localStorage.setItem(STATE_KEY,JSON.stringify(state));
 const isoLocal=d=>[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");
 const parseDate=s=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d,12);};
@@ -192,24 +192,25 @@ function render(){
  el.missingSidePanel.classList.toggle("hidden",!state.configured||!!state.nextInjectionSide);
  if(state.configured){
   const remaining=daysUntil(state.nextDueDate);
-   el.gaugeDays.textContent=String(Math.abs(remaining));
-   el.gaugeLabel.textContent=remaining<0?"ימי איחור":remaining===1?"יום":"ימים";
-   el.dueGauge.setAttribute("aria-label",remaining<0?`איחור של ${-remaining} ימים בהזרקה`:`${remaining} ימים עד ההזרקה`);
-   const progress=Math.max(0,Math.min(1,(14-remaining)/14));
-   el.gaugeNeedle.style.transform=`rotate(${-118+progress*236}deg)`;
+   el.daysLeftNumber.textContent=String(Math.abs(remaining));
+   el.daysLeftLabel.textContent=remaining<0?(remaining===-1?"יום באיחור":"ימים באיחור"):remaining===0?"היום":remaining===1?"יום נותר":"ימים נותרו";
+   const remainingPanel=el.daysLeftNumber.parentElement;
+   remainingPanel.classList.toggle("overdue",remaining<0);
+   remainingPanel.classList.toggle("today",remaining===0);
+   const progress=Math.max(0,Math.min(14,14-remaining));
+   el.cycleFill.style.width=`${progress/14*100}%`;
+   el.cycleProgressText.textContent=remaining<0?"מועד ההזרקה חלף":remaining===0?"יום ההזרקה":`${progress} מתוך 14 ימים`;
+   el.cycleProgressButton.classList.toggle("overdue",remaining<0);
    const prefs=normalizePrefs(state.notificationPrefs),copies=[];
-   if(prefs.eve)copies.push(`ערב קודם: ${prefs.eveTime}`);
-   if(prefs.dayTimes.length)copies.push(`ביום ההזרקה: ${prefs.dayTimes.join(" · ")}`);
-   if(prefs.purchase)copies.push(`תזכורת לחבילה: ${prefs.purchaseTime}`);
-   el.scheduleCopy.textContent=copies.length?copies.join("  |  "):"כל ההתראות כבויות (ניתן לשנות בהגדרות)";
+   if(prefs.eve)copies.push("ערב קודם");
+   if(prefs.dayTimes.length)copies.push(`${prefs.dayTimes.length} ביום ההזרקה`);
+   if(prefs.purchase)copies.push("חידוש מלאי");
+   el.scheduleCopy.textContent=copies.length?`התראות: ${copies.join(" · ")}`:"ההתראות כבויות — לחץ לעריכה";
    el.nextDueDate.textContent=formatDate(state.nextDueDate);
-  el.nextInjectionSide.textContent=sideLabel(state.nextInjectionSide);
-  el.countdown.textContent=countdown(state.nextDueDate);
-  el.countdown.classList.toggle("overdue",daysUntil(state.nextDueDate)<=0);
-  el.doseText.textContent=`${state.dosesRemaining} זריקות זמינות`;
-  el.doseDots.replaceChildren();
-  for(let i=0;i<Math.max(2,Math.min(6,state.dosesRemaining));i++){const d=document.createElement("span");d.className="dose-dot "+(i<state.dosesRemaining?"filled":"");el.doseDots.appendChild(d);}
-  el.packageEmpty.classList.toggle("hidden",state.dosesRemaining!==0&&!state.orderPending);
+   el.nextInjectionSide.textContent=sideLabel(state.nextInjectionSide);
+   el.doseNumber.textContent=String(state.dosesRemaining);
+   el.doseText.textContent=state.dosesRemaining===1?"זריקה נותרה":"זריקות נותרו";
+   el.packageEmpty.classList.toggle("hidden",state.dosesRemaining!==0&&!state.orderPending);
   el.packageEmpty.textContent=state.orderPending?(state.dosesRemaining===0?"החבילה הוזמנה — ממתינים להגעה":"חבילה חדשה בהזמנה"):"המלאי הסתיים — יש לרכוש חבילה";
   el.orderPackage.textContent=state.orderPending?"בטל סימון הזמנה":"הזמנתי חבילה";
   el.confirmInjection.disabled=!dueNow()||state.dosesRemaining<=0;
@@ -253,6 +254,33 @@ async function toggleOrder(){
   toast(pending?"ההזמנה נרשמה — לא יישלחו תזכורות רכישה בזמן ההמתנה.":"סימון ההזמנה בוטל.");
  }catch{toast("השינוי נשמר באייפון, אך לא סונכרן עדיין להתראות. בדוק חיבור לאינטרנט.");}
 }
+function updateStockStepper(){
+ el.stockDraftNumber.textContent=String(stockDraft);
+ el.stockDraftLabel.textContent=stockDraft===1?"זריקה נותרה":"זריקות נותרו";
+ el.stockDecrement.disabled=stockDraft===0;
+ el.stockIncrement.disabled=stockDraft===40;
+}
+function openStockEditor(){
+ stockDraft=state.dosesRemaining;
+ updateStockStepper();showModal(el.stockDialog);
+}
+async function saveStockEdit(){
+ if(stockDraft===state.dosesRemaining){el.stockDialog.close();return;}
+ if(!navigator.onLine)return toast("כדי לעדכן מלאי והתראות נדרש חיבור לאינטרנט.");
+ el.saveStock.disabled=true;
+ try{
+  try{await device("/inventory",{dosesRemaining:stockDraft,orderPending:state.orderPending});}
+  catch(error){
+   // Fallback if Cloudflare has not yet deployed the dedicated inventory endpoint.
+   if(String(error?.message)!=="HTTP 404"||!state.nextInjectionSide)throw error;
+   await device("/edit",{nextDueDate:state.nextDueDate,nextSide:state.nextInjectionSide,dosesRemaining:stockDraft,orderPending:state.orderPending});
+  }
+  state.dosesRemaining=stockDraft;
+  save();render();el.stockDialog.close();
+  toast(stockDraft===1?"המלאי עודכן: נשארה זריקה אחת.":`המלאי עודכן: ${stockDraft} זריקות נותרו.`);
+ }catch{toast("עדכון המלאי לא נשמר בשרת. נסה שוב לאחר בדיקת החיבור.");}
+ finally{el.saveStock.disabled=false;}
+}
 function openTrackingEditor(){
  el.editNextDue.value=state.nextDueDate;
  el.editNextSide.value=state.nextInjectionSide||"right";
@@ -280,8 +308,8 @@ async function applyTrackingEdits(){
  finally{el.saveTrackingEdits.disabled=false;}
 }
 async function refreshTracking(){
- if(el.refreshTracking.disabled)return;
- el.refreshTracking.disabled=true;
+ if(refreshBusy)return;
+ refreshBusy=true;
  try{
   if(!navigator.onLine){render();toast("אין אינטרנט כרגע. ניתן לסנכרן כשיש חיבור.");return;}
   await flush();
@@ -289,7 +317,7 @@ async function refreshTracking(){
   if("Notification"in window&&Notification.permission==="granted"){try{await subscribe(false);}catch{}}
   render();
   toast("רועננו הנתונים המקומיים וסנכרון ההתראות נבדק.");
- }finally{el.refreshTracking.disabled=false;}
+ }finally{refreshBusy=false;}
 }
 async function reset(){
  if(!confirm("למחוק את כל הנתונים ולהתחיל מחדש?"))return;
@@ -318,8 +346,15 @@ function bind(){
  el.pushWarning.addEventListener("click",async()=>{try{await subscribe(true);toast("ההתראות הופעלו.");}catch{toast("לא ניתן להפעיל התראות כעת.");}render();});
  el.confirmInjection.addEventListener("click",()=>{if(!state.nextInjectionSide)return toast("יש להשלים קודם את צד ההזרקה האחרונה.");el.confirmDialogText.textContent=`האישור יתייחס למועד המתוכנן ${formatDate(state.nextDueDate)}, ${sideLabel(state.nextInjectionSide)}. ההזרקה הבאה תישאר 14 יום לאחר המועד המתוכנן הזה ובצד ההפוך.`;showModal(el.confirmDialog);});
  el.dialogConfirmInjection.addEventListener("click",e=>{e.preventDefault();el.confirmDialog.close();confirmInjection();});
- [el.settingsDrawer,el.confirmDialog,el.packageDialog,el.editTrackingDialog,el.notificationDialog].forEach(d=>d.addEventListener("close",unlockModal));
+ [el.settingsDrawer,el.confirmDialog,el.packageDialog,el.editTrackingDialog,el.notificationDialog,el.stockDialog].forEach(d=>d.addEventListener("close",unlockModal));
  el.openSettings.addEventListener("click",()=>showModal(el.settingsDrawer));
+ el.quickEditDate.addEventListener("click",openTrackingEditor);
+ el.cycleProgressButton.addEventListener("click",openTrackingEditor);
+ el.quickStockEdit.addEventListener("click",openStockEditor);
+ el.quickNotifications.addEventListener("click",openNotificationsEditor);
+ el.stockDecrement.addEventListener("click",()=>{stockDraft=Math.max(0,stockDraft-1);updateStockStepper();});
+ el.stockIncrement.addEventListener("click",()=>{stockDraft=Math.min(40,stockDraft+1);updateStockStepper();});
+ el.saveStock.addEventListener("click",saveStockEdit);
  el.closeSettings.addEventListener("click",()=>el.settingsDrawer.close());
  el.manageNotifications.addEventListener("click",()=>{el.settingsDrawer.close();openNotificationsEditor();});
  el.eveEnabled.addEventListener("change",()=>{el.eveTime.disabled=!el.eveEnabled.checked;});
@@ -336,7 +371,6 @@ function bind(){
  el.orderPackage.addEventListener("click",toggleOrder);
  el.editTracking.addEventListener("click",()=>{el.settingsDrawer.close();openTrackingEditor();});
  el.saveTrackingEdits.addEventListener("click",e=>{e.preventDefault();applyTrackingEdits();});
- el.refreshTracking.addEventListener("click",refreshTracking);
  el.newPackage.addEventListener("click",()=>showModal(el.packageDialog));
  el.dialogConfirmPackage.addEventListener("click",e=>{e.preventDefault();el.packageDialog.close();purchased();});
  el.resetApp.addEventListener("click",reset);
