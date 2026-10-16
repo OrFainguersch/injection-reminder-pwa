@@ -2,6 +2,7 @@ name: Validate PWA (email quiet)
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 jobs:
   validate:
@@ -16,7 +17,7 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Validate application revision
         id: checks
-        continue-on-error: true
+        continue-on-error: ${{ github.event_name != 'pull_request' }}
         run: |
           set -e
           node --check public/app.js
